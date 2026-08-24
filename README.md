@@ -1,5 +1,7 @@
 # LRC Visualizer
 
+链接如下：
+https://y1ch3nq.github.io/lrc-visualizer/
 一个浏览器端歌词视频制作器，支持中文 LRC、字体导入、歌词从左到右变色预览，以及带背景或透明画布的可视化导出。
 
 ## 功能
