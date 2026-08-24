@@ -849,6 +849,69 @@ input[type="range"] {
   overflow-wrap: anywhere;
 }
 
+.tiktokFrameExport {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(230, 120, 67, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 247, 241, 0.78);
+}
+
+.tiktokFrameExportHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tiktokFrameExportHeader strong {
+  color: #71442e;
+  font-size: 11px;
+}
+
+.tiktokFrameExportHeader p {
+  margin-top: 3px;
+  color: #927c70;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.tiktokFrameExportHeader > span {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #a65630;
+  background: #fde8dc;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.tiktokFrameExportButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 35px;
+  border: 1px solid #e67843;
+  border-radius: 8px;
+  color: #ad572e;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.tiktokFrameExportButton:hover:not(:disabled) {
+  color: #ffffff;
+  background: #e67843;
+}
+
+.tiktokFrameExportButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
 @media (max-width: 1160px) {
   .appShell {
     grid-template-columns: 1fr;
@@ -4208,5 +4271,1058 @@ canvas[data-orientation="square"] {
 
   .previewPanel .transport .seekSlider {
     accent-color: #e67843 !important;
+  }
+}
+
+/* Lyrics import and built-in timing editor */
+.lyricsImportBlock {
+  display: grid;
+  gap: 7px;
+}
+
+.compactFileRowSecondary {
+  min-height: 47px;
+  border-style: solid;
+  background: #fffdfb;
+}
+
+.assetStateTxt {
+  color: #6f645e;
+  font-size: 8px;
+  letter-spacing: -0.02em;
+}
+
+.lyricToolActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.lyricToolActions button {
+  min-height: 31px;
+  padding: 5px 8px;
+  border: 1px solid #e4ded9;
+  border-radius: 7px;
+  color: #76503d;
+  background: #fffaf6;
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.lyricToolActions button:hover:not(:disabled) {
+  border-color: #d7a183;
+  background: #fff4ec;
+}
+
+.lyricToolActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pasteLyricsTrigger {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 9px;
+  min-height: 45px;
+  padding: 7px 9px;
+  border: 1px solid #e7d9cf;
+  border-radius: 8px;
+  color: #614a3e;
+  background: linear-gradient(135deg, #fff9f4, #fffdfb);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pasteLyricsTrigger:hover:not(:disabled) {
+  border-color: #d7a183;
+  background: #fff5ed;
+}
+
+.pasteLyricsTrigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pasteLyricsTrigger > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  color: #ffffff;
+  background: #e67843;
+  font-size: 16px;
+}
+
+.pasteLyricsTrigger strong,
+.pasteLyricsTrigger small {
+  display: block;
+}
+
+.pasteLyricsTrigger strong {
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.pasteLyricsTrigger small {
+  margin-top: 2px;
+  color: #9a8b82;
+  font-size: 9px;
+}
+
+.pasteLyricsTrigger > span:last-child {
+  color: #a96542;
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.pasteLyricsTriggerWide {
+  margin-top: -3px;
+}
+
+.pasteLyricsBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(27, 25, 23, 0.52);
+  backdrop-filter: blur(13px) saturate(90%);
+}
+
+.pasteLyricsDialog {
+  width: min(680px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 17px;
+  color: #342f2b;
+  background: #fbfaf8;
+  box-shadow: 0 32px 90px rgba(34, 28, 24, 0.3);
+}
+
+.pasteLyricsDialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #e8e3dd;
+  background: #ffffff;
+}
+
+.pasteLyricsDialog > header span {
+  color: #d56b39;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+}
+
+.pasteLyricsDialog > header h2 {
+  margin-top: 5px;
+  color: #2c2825;
+  font-size: 21px;
+  letter-spacing: -0.03em;
+}
+
+.pasteLyricsDialog > header p {
+  margin-top: 6px;
+  color: #918a84;
+  font-size: 10px;
+}
+
+.pasteLyricsDialog > header button {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  padding: 0;
+  border: 1px solid #e2ddd7;
+  border-radius: 50%;
+  color: #766f69;
+  background: #ffffff;
+  font-size: 19px;
+  cursor: pointer;
+}
+
+.pasteLyricsDialog > textarea {
+  display: block;
+  width: calc(100% - 44px);
+  min-height: 330px;
+  max-height: 55dvh;
+  margin: 20px 22px;
+  padding: 15px 16px;
+  resize: vertical;
+  border: 1px solid #ddd6cf;
+  border-radius: 11px;
+  color: #36312d;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.72;
+  box-shadow: inset 0 1px 3px rgba(45, 36, 29, 0.035);
+}
+
+.pasteLyricsDialog > textarea::placeholder {
+  color: #aaa29b;
+}
+
+.pasteLyricsDialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 17px;
+  border-top: 1px solid #e5e0da;
+  background: #ffffff;
+}
+
+.pasteLyricsDialog > footer > div:first-child strong,
+.pasteLyricsDialog > footer > div:first-child span {
+  display: block;
+}
+
+.pasteLyricsDialog > footer > div:first-child strong {
+  color: #5c554f;
+  font-size: 10px;
+}
+
+.pasteLyricsDialog > footer > div:first-child span {
+  margin-top: 3px;
+  color: #97908a;
+  font-size: 9px;
+}
+
+.pasteLyricsDialog > footer > div:first-child .pasteLyricsError {
+  color: #b64d3f;
+}
+
+.pasteLyricsDialog > footer > div:last-child {
+  display: flex;
+  gap: 7px;
+}
+
+.pasteLyricsDialog > footer button {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid #ddd7d1;
+  border-radius: 8px;
+  color: #645d57;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 690;
+  cursor: pointer;
+}
+
+.pasteLyricsDialog > footer .pasteLyricsStartButton {
+  border-color: #e67843;
+  color: #ffffff;
+  background: #e67843;
+}
+
+.pasteLyricsDialog > footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+body:has(.timingEditorBackdrop) {
+  overflow: hidden;
+}
+
+.timingEditorBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(27, 25, 23, 0.56);
+  backdrop-filter: blur(14px) saturate(88%);
+}
+
+.timingEditorDialog {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(1180px, 100%);
+  height: min(820px, calc(100dvh - 48px));
+  min-height: 560px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 18px;
+  color: #302d2a;
+  background: #f8f7f4;
+  box-shadow: 0 38px 100px rgba(32, 27, 23, 0.34);
+}
+
+.timingEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 21px 24px 16px;
+  border-bottom: 1px solid #e7e3de;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.timingEditorEyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #d76b39;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+}
+
+.timingEditorHeader h2 {
+  color: #282522;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.timingEditorHeader p {
+  margin-top: 6px;
+  color: #8b8781;
+  font-size: 11px;
+}
+
+.timingCloseButton {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #e1ddd7;
+  border-radius: 50%;
+  color: #756f69;
+  background: #ffffff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.timingTransport {
+  display: grid;
+  grid-template-columns: auto auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e3dfda;
+  background: #f0ede8;
+}
+
+.timingPlayButton {
+  min-width: 68px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #e67843;
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+  box-shadow: 0 7px 16px rgba(201, 99, 53, 0.22);
+}
+
+.timingPlayButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.timingClock {
+  min-width: 112px;
+  color: #4f4a45;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timingClock strong {
+  font-size: 14px;
+}
+
+.timingClock span {
+  margin-left: 5px;
+  color: #99938d;
+  font-size: 10px;
+}
+
+.timingSeek {
+  width: 100%;
+  accent-color: #e67843;
+}
+
+.timingRate {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #817b75;
+  font-size: 10px;
+}
+
+.timingRate select {
+  min-height: 31px;
+  border: 1px solid #dcd6d0;
+  border-radius: 7px;
+  color: #504b46;
+  background: #ffffff;
+}
+
+.timingEditorBody {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr);
+  min-height: 0;
+}
+
+.timingLineColumn {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid #e4e0db;
+  background: #f3f1ed;
+}
+
+.timingColumnTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e0db;
+  color: #59544f;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.timingColumnTitle small {
+  color: #96908a;
+  font-size: 9px;
+  font-weight: 560;
+}
+
+.timingLineList {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  scrollbar-width: thin;
+}
+
+.timingLineRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  width: 100%;
+  gap: 8px;
+  padding: 10px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #413d39;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timingLineRow:hover {
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.timingLineRow.selected {
+  border-color: #e2ad90;
+  background: #fff8f3;
+  box-shadow: 0 4px 14px rgba(114, 74, 52, 0.07);
+}
+
+.timingLineRow.playing .timingLineNumber {
+  color: #ffffff;
+  background: #e67843;
+}
+
+.timingLineRow.invalid:not(.selected) {
+  background: rgba(183, 75, 61, 0.04);
+}
+
+.timingLineNumber {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 7px;
+  color: #8a827b;
+  background: #e9e5df;
+  font-size: 9px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.timingLineCopy {
+  min-width: 0;
+}
+
+.timingLineCopy strong,
+.timingLineCopy small,
+.timingLineCopy em {
+  display: block;
+}
+
+.timingLineCopy strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timingLineCopy small {
+  margin-top: 4px;
+  color: #938c85;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timingLineCopy em {
+  margin-top: 4px;
+  color: #b74739;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.timingInspector {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+  background: #fbfaf8;
+}
+
+.timingNowCard {
+  padding: 16px 17px;
+  border: 1px solid #e6dfd9;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.timingNowCard > span,
+.timingNowCard > strong,
+.timingNowCard > small {
+  display: block;
+}
+
+.timingNowCard > span {
+  color: #d46d3d;
+  font-size: 9px;
+  font-weight: 780;
+}
+
+.timingNowCard > strong {
+  margin-top: 7px;
+  color: #292622;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.timingNowCard > small {
+  margin-top: 8px;
+  color: #99918a;
+  font-size: 10px;
+}
+
+.timingMarkButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 11px;
+}
+
+.timingMarkButtons button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid #e0d8d1;
+  border-radius: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timingMarkButtons .startMark {
+  color: #70462f;
+  background: #fff4eb;
+}
+
+.timingMarkButtons .endMark {
+  color: #455364;
+  background: #f2f5f8;
+}
+
+.timingMarkButtons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.timingMarkButtons kbd,
+.timingShortcutHelp kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 31px;
+  min-height: 26px;
+  padding: 3px 6px;
+  border: 1px solid rgba(80, 70, 62, 0.18);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.8);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.timingMarkButtons button span,
+.timingMarkButtons button strong,
+.timingMarkButtons button small {
+  display: block;
+}
+
+.timingMarkButtons button strong {
+  font-size: 12px;
+}
+
+.timingMarkButtons button small {
+  margin-top: 3px;
+  color: #8a8179;
+  font-size: 9px;
+}
+
+.timingFieldGroup {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e7e2dc;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.timingFieldGroup label,
+.timingNumberGrid label {
+  display: grid;
+  gap: 5px;
+  color: #716a64;
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.timingFieldGroup textarea,
+.timingFieldGroup input {
+  width: 100%;
+  border: 1px solid #ddd7d1;
+  border-radius: 8px;
+  color: #3e3935;
+  background: #fbfaf8;
+}
+
+.timingFieldGroup textarea {
+  min-height: 58px;
+  padding: 9px 10px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.timingFieldGroup input {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timingNumberGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.timingFineSeek {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.timingFineSeek button,
+.timingAlignmentCard button,
+.timingFooterActions button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #ded8d2;
+  border-radius: 7px;
+  color: #5e5751;
+  background: #ffffff;
+  font-size: 9px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.manualWordTimingCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid #ead7c9;
+  border-radius: 11px;
+  background: #fff8f2;
+}
+
+.manualWordTimingCard strong {
+  color: #714a35;
+  font-size: 11px;
+}
+
+.manualWordTimingCard p {
+  margin-top: 4px;
+  color: #9a7f70;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.manualWordTimingCard button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #dfb79f;
+  border-radius: 7px;
+  color: #985c39;
+  background: #ffffff;
+  font-size: 9px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.manualWordTimingCard button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.manualWordTimingWorkspace {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid #e3bda7;
+  border-radius: 12px;
+  background: #fffaf6;
+  box-shadow: 0 7px 20px rgba(127, 77, 48, 0.07);
+}
+
+.manualWordTimingWorkspace > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 13px;
+  border-bottom: 1px solid #ebd8cc;
+  background: #fff4eb;
+}
+
+.manualWordTimingWorkspace > header span,
+.manualWordTimingWorkspace > header strong,
+.manualWordTimingWorkspace > header small {
+  display: block;
+}
+
+.manualWordTimingWorkspace > header span {
+  color: #b06a43;
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: 0.04em;
+}
+
+.manualWordTimingWorkspace > header strong {
+  margin-top: 4px;
+  color: #503a2d;
+  font-size: 13px;
+}
+
+.manualWordTimingWorkspace > header small {
+  margin-top: 3px;
+  color: #a38b7d;
+  font-size: 8px;
+}
+
+.manualWordTimingWorkspace > header button,
+.wordTimingActions button,
+.wordTimingSegmentation button {
+  min-height: 29px;
+  padding: 5px 8px;
+  border: 1px solid #e1c8b9;
+  border-radius: 7px;
+  color: #84583f;
+  background: #ffffff;
+  font-size: 8px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.wordTimingTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px 13px;
+  scrollbar-width: thin;
+}
+
+.wordTimingToken {
+  display: grid;
+  gap: 3px;
+  min-width: 58px;
+  min-height: 47px;
+  padding: 7px 9px;
+  border: 1px solid #e2d8d0;
+  border-radius: 8px;
+  color: #665951;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wordTimingToken strong {
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.wordTimingToken small {
+  color: #aaa099;
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wordTimingToken.timed {
+  border-color: #bad3bf;
+  color: #48644e;
+  background: #f5fbf6;
+}
+
+.wordTimingToken.timed small {
+  color: #73917a;
+}
+
+.wordTimingToken.active {
+  border-color: #e67843;
+  color: #8d4c29;
+  background: #fff0e5;
+  box-shadow: 0 0 0 2px rgba(230, 120, 67, 0.12);
+}
+
+.wordTimingActions {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr;
+  gap: 7px;
+  padding: 0 13px 10px;
+}
+
+.wordTimingActions .wordTimingStampButton {
+  border-color: #e67843;
+  color: #ffffff;
+  background: #e67843;
+}
+
+.wordTimingActions button:disabled,
+.wordTimingSegmentation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.wordTimingSegmentation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 13px 11px;
+  border-top: 1px solid #eee0d7;
+  color: #9a887d;
+  font-size: 8px;
+}
+
+.wordTimingSegmentation button {
+  min-height: 25px;
+  padding: 4px 7px;
+}
+
+.timingShortcutHelp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 13px;
+  margin-top: 12px;
+  color: #8e8780;
+  font-size: 9px;
+}
+
+.timingShortcutHelp span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.timingShortcutHelp kbd {
+  min-width: 24px;
+  min-height: 20px;
+  padding: 1px 4px;
+}
+
+.timingAlignmentCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid #dce2e7;
+  border-radius: 11px;
+  background: #f3f7f9;
+}
+
+.timingAlignmentCard strong {
+  color: #465565;
+  font-size: 11px;
+}
+
+.timingAlignmentCard p {
+  margin-top: 4px;
+  color: #84909b;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.timingAlignmentCard button {
+  flex: 0 0 auto;
+  color: #526779;
+  border-color: #cfdbe3;
+}
+
+.timingAlignmentCard button:disabled,
+.timingFooterActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.43;
+}
+
+.timingEditorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 18px;
+  border-top: 1px solid #e2ddd7;
+  background: #ffffff;
+}
+
+.timingStatus {
+  min-width: 0;
+}
+
+.timingStatus strong,
+.timingStatus span {
+  display: block;
+}
+
+.timingStatus strong {
+  color: #4a6652;
+  font-size: 10px;
+}
+
+.timingStatus.hasError strong {
+  color: #b24d3f;
+}
+
+.timingStatus span {
+  max-width: 560px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8d8781;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timingFooterActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.timingFooterActions .timingApplyButton {
+  border-color: #e67843;
+  color: #ffffff;
+  background: #e67843;
+  box-shadow: 0 6px 15px rgba(202, 99, 52, 0.18);
+}
+
+@media (max-width: 860px) {
+  .pasteLyricsBackdrop {
+    padding: 10px;
+  }
+
+  .pasteLyricsDialog > textarea {
+    min-height: 280px;
+  }
+
+  .pasteLyricsDialog > footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pasteLyricsDialog > footer > div:last-child,
+  .pasteLyricsDialog > footer button {
+    width: 100%;
+  }
+
+  .timingEditorBackdrop {
+    padding: 10px;
+  }
+
+  .timingEditorDialog {
+    height: calc(100dvh - 20px);
+    min-height: 0;
+    border-radius: 12px;
+  }
+
+  .timingTransport {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .timingSeek {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .timingEditorBody {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .timingLineColumn {
+    min-height: 300px;
+    border-right: 0;
+    border-bottom: 1px solid #e4e0db;
+  }
+
+  .timingLineList {
+    max-height: 310px;
+  }
+
+  .timingEditorFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timingFooterActions {
+    width: 100%;
+  }
+
+  .timingFooterActions button {
+    flex: 1;
   }
 }

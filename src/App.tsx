@@ -4,7 +4,14 @@ import {
   getDirectExportSupport,
   type FastExportSupport,
 } from './fast-export.ts'
-import { decodeLrcFile, parseLrc, type ParsedLrc } from './lrc.ts'
+import { alignLyricsToAudio } from './audio-word-alignment.ts'
+import {
+  decodeLrcFile,
+  parseLrc,
+  parsePlainTextLyrics,
+  type LyricLine,
+  type ParsedLrc,
+} from './lrc.ts'
 import {
   extractImagePalette,
   palettePresets,
@@ -16,7 +23,17 @@ import {
   sampleAudioReactiveEnvelope,
   type AudioReactiveEnvelope,
 } from './audio-reactivity.ts'
-import { drawVisualizer, fitCanvasToSettings, type VisualizerSettings } from './renderer.ts'
+import {
+  drawVisualizer,
+  fitCanvasToSettings,
+  getTikTokWordFrameTimeline,
+  type VisualizerSettings,
+} from './renderer.ts'
+import { TimingEditor, type TimingDraftLine } from './TimingEditor.tsx'
+import {
+  exportTikTokWordFrames,
+  type TikTokFrameExportResult,
+} from './tiktok-frame-export.ts'
 
 interface ImportedFont {
   id: string
@@ -37,8 +54,16 @@ interface PresetSize {
   height: number
 }
 
+interface TimingEditorSource {
+  name: string
+  encoding: string
+  metadata: Record<string, string>
+  lines: TimingDraftLine[]
+}
+
 const chineseSystemFont = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
 const englishSystemFont = 'Inter, "SF Pro Display", Arial, sans-serif'
+const tiktokReferenceFont = '"Arial Narrow", "Helvetica Neue", Arial, sans-serif'
 
 const presetSizes: PresetSize[] = [
   { label: '16:9 1920 x 1080', width: 1920, height: 1080 },
@@ -73,7 +98,9 @@ function App() {
   const seekSliderRef = useRef<HTMLInputElement | null>(null)
   const currentTimeValueRef = useRef<HTMLSpanElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
+  const audioFileRef = useRef<File | null>(null)
   const resultUrlRef = useRef<string | null>(null)
+  const frameSequenceUrlRef = useRef<string | null>(null)
   const paletteImageUrlRef = useRef<string | null>(null)
   const coverUrlRef = useRef<string | null>(null)
   const coverImageRef = useRef<HTMLImageElement | null>(null)
@@ -117,6 +144,7 @@ function App() {
     visibleLineCount: 9,
     lyricAlignment: 'center',
     visualStyle: 'classic',
+    tiktokTextBlur: 2,
     singleWaveSpeedRamp: false,
     showBeatBar: false,
     showMetadata: true,
@@ -132,6 +160,7 @@ function App() {
   const [exportEndTime, setExportEndTime] = useState(27)
   const [fastExportSupport, setFastExportSupport] = useState<FastExportSupport | null>(null)
   const [exportResult, setExportResult] = useState<ExportResult | null>(null)
+  const [frameSequenceResult, setFrameSequenceResult] = useState<TikTokFrameExportResult | null>(null)
   const [paletteImageUrl, setPaletteImageUrl] = useState('')
   const [paletteSourceName, setPaletteSourceName] = useState('')
   const [paletteStatus, setPaletteStatus] = useState('上传画面截图，自动生成协调的歌词颜色')
@@ -165,6 +194,11 @@ function App() {
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 0, height: 0 })
   const [audioAnalysisVersion, setAudioAnalysisVersion] = useState(0)
   const [beatAnalysisStatus, setBeatAnalysisStatus] = useState('导入音频后分析低频鼓点')
+  const [timingEditorSource, setTimingEditorSource] = useState<TimingEditorSource | null>(null)
+  const [isPasteLyricsOpen, setIsPasteLyricsOpen] = useState(false)
+  const [pastedLyricsText, setPastedLyricsText] = useState('')
+  const [pasteLyricsError, setPasteLyricsError] = useState('')
+  const [isAligningLyrics, setIsAligningLyrics] = useState(false)
 
   const title = songTitle.trim() || parsedLrc.metadata.ti || parsedLrc.metadata.title || stripExtension(lrcFileName || audioFileName)
   const artist = songArtist.trim() || parsedLrc.metadata.ar || parsedLrc.metadata.artist || ''
@@ -172,6 +206,7 @@ function App() {
     () => [
       { label: '系统中文', value: chineseSystemFont },
       { label: '系统英文', value: englishSystemFont },
+      { label: 'Arial Narrow（TikTok 参考）', value: tiktokReferenceFont },
       ...importedFonts.map((font) => ({ label: font.name, value: quoteFontFamily(font.family) })),
     ],
     [importedFonts],
@@ -449,6 +484,10 @@ function App() {
         URL.revokeObjectURL(resultUrlRef.current)
       }
 
+      if (frameSequenceUrlRef.current) {
+        URL.revokeObjectURL(frameSequenceUrlRef.current)
+      }
+
       if (paletteImageUrlRef.current) {
         URL.revokeObjectURL(paletteImageUrlRef.current)
       }
@@ -497,6 +536,27 @@ function App() {
     }
 
     setSettings((current) => {
+      if (visualStyle === 'tiktok') {
+        return {
+          ...current,
+          width: 1080,
+          height: 1920,
+          backgroundColor: '#000000',
+          transparentBackground: false,
+          lyricColor: '#050505',
+          progressColor: '#050505',
+          nextColor: '#050505',
+          englishFont: tiktokReferenceFont,
+          fontSize: 146,
+          visualStyle,
+          lyricAlignment: 'left',
+          lyricHighlightMode: 'instant',
+          showMetadata: false,
+          showProgressBar: false,
+          showBeatBar: false,
+        }
+      }
+
       if (visualStyle !== 'single') {
         return { ...current, visualStyle }
       }
@@ -685,6 +745,7 @@ function App() {
 
     const url = URL.createObjectURL(file)
     audioUrlRef.current = url
+    audioFileRef.current = file
     audioReactiveEnvelopeRef.current = null
     setAudioAnalysisVersion((version) => version + 1)
     setBeatAnalysisStatus('正在分析低频鼓点…')
@@ -758,6 +819,139 @@ function App() {
       }
     } catch (error) {
       setExportStatus(error instanceof Error ? error.message : 'LRC 文件读取失败')
+    }
+  }
+
+  const openTimingEditor = (source: TimingEditorSource) => {
+    audioRef.current?.pause()
+    setIsPlaying(false)
+    setIsPasteLyricsOpen(false)
+    setTimingEditorSource(source)
+  }
+
+  const openCurrentLyricsInTimingEditor = () => {
+    openTimingEditor({
+      name: lrcFileName || 'lyrics.lrc',
+      encoding: lrcEncoding || parsedLrc.encoding || 'UTF-8',
+      metadata: parsedLrc.metadata,
+      lines: parsedLrc.lines.map((line) => ({
+        id: line.id,
+        text: line.text,
+        startTime: line.time,
+        endTime: line.endTime,
+        words: line.words,
+      })),
+    })
+  }
+
+  const handleTxtFile = async (file: File | undefined) => {
+    if (!file || isExporting) {
+      return
+    }
+
+    try {
+      const decoded = await decodeLrcFile(file)
+      const textLines = parsePlainTextLyrics(decoded.text)
+      if (textLines.length === 0) {
+        setExportStatus('TXT 中没有可用的歌词行')
+        return
+      }
+      openTimingEditor({
+        name: file.name,
+        encoding: decoded.encoding,
+        metadata: {},
+        lines: textLines.map((text, index) => ({
+          id: `txt-${index}-${crypto.randomUUID()}`,
+          text,
+          words: [],
+        })),
+      })
+      setExportStatus(`已读取 ${textLines.length} 行纯文本歌词，请在打轴器中标记时间`)
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : 'TXT 文件读取失败')
+    }
+  }
+
+  const openPasteLyricsDialog = () => {
+    if (isExporting) {
+      return
+    }
+    audioRef.current?.pause()
+    setIsPlaying(false)
+    setPasteLyricsError('')
+    setIsPasteLyricsOpen(true)
+  }
+
+  const startTimingPastedLyrics = () => {
+    const textLines = parsePlainTextLyrics(pastedLyricsText)
+    if (textLines.length === 0) {
+      setPasteLyricsError('请至少粘贴一行歌词。')
+      return
+    }
+
+    openTimingEditor({
+      name: '粘贴歌词.txt',
+      encoding: 'UTF-8',
+      metadata: {},
+      lines: textLines.map((text, index) => ({
+        id: `paste-${index}-${crypto.randomUUID()}`,
+        text,
+        words: [],
+      })),
+    })
+    setPastedLyricsText('')
+    setPasteLyricsError('')
+    setExportStatus(`已读取 ${textLines.length} 行粘贴歌词，请在打轴器中标记时间`)
+  }
+
+  const applyTimedLyrics = (lines: LyricLine[], sourceName: string) => {
+    if (!timingEditorSource) {
+      return
+    }
+    const nextParsed: ParsedLrc = {
+      lines,
+      metadata: timingEditorSource.metadata,
+      encoding: timingEditorSource.encoding,
+    }
+    setParsedLrc(nextParsed)
+    setLrcFileName(sourceName.replace(/\.txt$/i, '.lrc'))
+    setLrcEncoding(timingEditorSource.encoding)
+    if (nextParsed.metadata.ti || nextParsed.metadata.title) {
+      setSongTitle(nextParsed.metadata.ti || nextParsed.metadata.title)
+    }
+    if (nextParsed.metadata.ar || nextParsed.metadata.artist) {
+      setSongArtist(nextParsed.metadata.ar || nextParsed.metadata.artist)
+    }
+    currentTimeRef.current = 0
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+    }
+    setTimingEditorSource(null)
+    setExportStatus(`打轴已应用：${lines.length} 行${lines.some((line) => line.endTime !== undefined) ? ' · 含独立句尾' : ''}`)
+  }
+
+  const alignCurrentLyricsLocally = async () => {
+    const audioFile = audioFileRef.current
+    if (!audioFile) {
+      setExportStatus('请先导入音频，再运行本地逐词对齐')
+      return
+    }
+    if (parsedLrc.lines.length === 0) {
+      setExportStatus('请先导入或打轴歌词')
+      return
+    }
+
+    audioRef.current?.pause()
+    setIsAligningLyrics(true)
+    setExportStatus('正在浏览器内分析声音起点并生成逐词时间…')
+    try {
+      const result = await alignLyricsToAudio(audioFile, parsedLrc.lines, audioDuration)
+      setParsedLrc((current) => ({ ...current, lines: result.lines }))
+      setExportStatus(`本地逐词对齐完成：${result.alignedLineCount} 句 · 参考置信度 ${Math.round(result.confidence * 100)}%`)
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : '本地逐词对齐失败')
+    } finally {
+      setIsAligningLyrics(false)
     }
   }
 
@@ -944,9 +1138,88 @@ function App() {
     }
   }
 
+  const startTikTokFrameExport = async () => {
+    if (settings.visualStyle !== 'tiktok') {
+      return
+    }
+
+    if (parsedLrc.lines.length === 0) {
+      setExportStatus('请先导入带时间轴的歌词')
+      return
+    }
+
+    const rangeStart = exportRangeMode === 'selection'
+      ? clampNumber(exportStartTime, 0, audioDuration)
+      : 0
+    const rangeEnd = exportRangeMode === 'selection'
+      ? clampNumber(exportEndTime, 0, audioDuration)
+      : audioDuration
+
+    if (rangeEnd - rangeStart < minimumExportDuration) {
+      setExportStatus('结束点必须晚于开始点至少 0.1 秒')
+      return
+    }
+
+    audioRef.current?.pause()
+    setIsExporting(true)
+    setExportProgress(0)
+    setExportCurrentTime(rangeStart)
+    setExportStatus('正在生成逐词 PNG 序列…')
+
+    try {
+      await document.fonts.ready
+      const result = await exportTikTokWordFrames({
+        lines: parsedLrc.lines,
+        duration: audioDuration,
+        startTime: rangeStart,
+        endTime: rangeEnd,
+        settings,
+        title,
+        artist,
+        coverImage: coverImageRef.current ?? undefined,
+        backgroundImage: backgroundImageRef.current ?? undefined,
+        brandIconImage: brandIconImageRef.current ?? undefined,
+        sodaBrandText,
+        sodaPlaylistText,
+        onProgress: (progress, time, frameCount) => {
+          setExportProgress(progress)
+          setExportCurrentTime(time)
+          setExportStatus(`正在生成逐词 PNG ${Math.round(progress * 100)}%（${frameCount} 张）`)
+        },
+      })
+
+      if (frameSequenceUrlRef.current) {
+        URL.revokeObjectURL(frameSequenceUrlRef.current)
+      }
+
+      frameSequenceUrlRef.current = result.url
+      setFrameSequenceResult(result)
+      setExportStatus(`已生成 ${result.frameCount} 张 PNG，并打包为 ZIP`)
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : '逐词 PNG 导出失败')
+    } finally {
+      setIsExporting(false)
+      renderFrame(currentTimeRef.current)
+    }
+  }
+
   const selectedSize = `${settings.width}x${settings.height}`
   const selectedRangeDuration = Math.max(0, exportEndTime - exportStartTime)
   const hasValidSelection = exportRangeMode === 'full' || selectedRangeDuration >= minimumExportDuration
+  const tiktokFrameCount = useMemo(() => {
+    if (settings.visualStyle !== 'tiktok' || parsedLrc.lines.length === 0) {
+      return 0
+    }
+
+    const rangeStart = exportRangeMode === 'selection'
+      ? clampNumber(exportStartTime, 0, audioDuration)
+      : 0
+    const rangeEnd = exportRangeMode === 'selection'
+      ? clampNumber(exportEndTime, 0, audioDuration)
+      : audioDuration
+
+    return getTikTokWordFrameTimeline(parsedLrc.lines, audioDuration, rangeStart, rangeEnd).length
+  }, [audioDuration, exportEndTime, exportRangeMode, exportStartTime, parsedLrc.lines, settings.visualStyle])
   const previewTime = isExporting ? exportCurrentTime : currentTimeRef.current
   const exportBadge = fastExportSupport === null
     ? '检测中'
@@ -1024,15 +1297,40 @@ function App() {
               <input type="file" accept="audio/*" onChange={(event) => handleAudioFile(event.target.files?.[0])} />
             </label>
 
-            <label className={lrcFileName ? 'compactFileRow isReady' : 'compactFileRow'}>
-              <span className="assetState assetStateLrc" aria-hidden="true">{lrcFileName ? '✓' : 'LRC'}</span>
-              <span className="assetCopy">
-                <strong>歌词</strong>
-                <small>{lrcFileName || '导入 LRC 歌词'}</small>
-              </span>
-              <span className="assetAction">{lrcFileName ? '替换' : '添加'}</span>
-              <input type="file" accept=".lrc,.txt,text/plain" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
-            </label>
+            <div className="lyricsImportBlock">
+              <label className={lrcFileName ? 'compactFileRow isReady' : 'compactFileRow'}>
+                <span className="assetState assetStateLrc" aria-hidden="true">{lrcFileName ? '✓' : 'LRC'}</span>
+                <span className="assetCopy">
+                  <strong>带时间 LRC</strong>
+                  <small>{lrcFileName || '直接导入已有时间轴'}</small>
+                </span>
+                <span className="assetAction">{lrcFileName ? '替换' : '导入'}</span>
+                <input type="file" accept=".lrc" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
+              </label>
+
+              <label className="compactFileRow compactFileRowSecondary">
+                <span className="assetState assetStateTxt" aria-hidden="true">TXT</span>
+                <span className="assetCopy">
+                  <strong>纯 TXT → 打轴器</strong>
+                  <small>逐句标记句首与独立句尾</small>
+                </span>
+                <span className="assetAction">打轴</span>
+                <input type="file" accept=".txt,text/plain" onChange={(event) => void handleTxtFile(event.target.files?.[0])} />
+              </label>
+
+              <button className="pasteLyricsTrigger" type="button" disabled={isExporting} onClick={openPasteLyricsDialog}>
+                <span aria-hidden="true">＋</span>
+                <span><strong>直接粘贴歌词</strong><small>无需保存 TXT，按换行自动拆句</small></span>
+                <span aria-hidden="true">粘贴</span>
+              </button>
+
+              <div className="lyricToolActions">
+                <button type="button" disabled={parsedLrc.lines.length === 0 || isExporting} onClick={openCurrentLyricsInTimingEditor}>打开打轴器</button>
+                <button type="button" disabled={!audioFileName || parsedLrc.lines.length === 0 || isAligningLyrics || isExporting} onClick={() => void alignCurrentLyricsLocally()}>
+                  {isAligningLyrics ? '对齐中…' : '本地逐词对齐'}
+                </button>
+              </div>
+            </div>
 
             <label className={coverUrl ? 'compactFileRow isReady' : 'compactFileRow'}>
               {coverUrl ? <img src={coverUrl} alt="当前专辑封面" className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">▣</span>}
@@ -1269,8 +1567,24 @@ function App() {
               <small>{lrcFileName ? `${lrcFileName}${lrcEncoding ? ` · ${lrcEncoding}` : ''}` : '自动识别 UTF-8、GBK、Big5 与 UTF-16'}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
-            <input type="file" accept=".lrc,.txt,text/plain" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
+            <input type="file" accept=".lrc" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
           </label>
+
+          <label className="fileInput">
+            <span className="fileIcon fileIconText" aria-hidden="true">TXT</span>
+            <span className="fileCopy">
+              <strong>导入纯 TXT 并打轴</strong>
+              <small>在内置打轴器中分别设置句首和句尾</small>
+            </span>
+            <span className="fileAdd" aria-hidden="true">＋</span>
+            <input type="file" accept=".txt,text/plain" onChange={(event) => void handleTxtFile(event.target.files?.[0])} />
+          </label>
+
+          <button className="pasteLyricsTrigger pasteLyricsTriggerWide" type="button" disabled={isExporting} onClick={openPasteLyricsDialog}>
+            <span aria-hidden="true">＋</span>
+            <span><strong>直接粘贴歌词</strong><small>把多行歌词粘贴进文本框后直接开始打轴</small></span>
+            <span aria-hidden="true">粘贴</span>
+          </button>
 
           <div className="metadataEditor">
             <label className="field">
@@ -1398,8 +1712,23 @@ function App() {
             value={activeTextColor}
             onChange={updateActiveTextColor}
           />
-          {(activeTextElement === 'currentLyric' || activeTextElement === 'normalLyric') && (
+          {settings.visualStyle === 'tiktok' && activeTextElement === 'currentLyric' && (
             <>
+              <RangeField
+                label="文字柔化"
+                value={settings.tiktokTextBlur}
+                min={0}
+                max={6}
+                unit="px"
+                onChange={(value) => updateSetting('tiktokTextBlur', value)}
+              />
+              <p className="singleLyricNote">0 px 为清晰边缘；约 2 px 接近参考图中轻微发虚的文字质感。</p>
+            </>
+          )}
+          {(activeTextElement === 'currentLyric' || activeTextElement === 'normalLyric') && (
+            settings.visualStyle === 'tiktok' ? (
+              <p className="singleLyricNote">参考模板固定使用左侧 24% 锚点、47% 排版宽度和自动两端分布；字号与字体仍可在这里调整。</p>
+            ) : <>
               <label className="field">
                 <span>歌词对齐</span>
                 <select
@@ -1489,10 +1818,13 @@ function App() {
               <option value="classic">普通滚动歌词</option>
               <option value="soda">汽水音乐卡片（无短视频侧栏）</option>
               <option value="single">单句整行波动歌词（淡入淡出）</option>
+              <option value="tiktok">TikTok 黑白逐词歌词（参考复刻）</option>
             </select>
           </label>
 
-          <div className="backgroundControls">
+          {settings.visualStyle === 'tiktok' ? (
+            <p className="singleLyricNote">画面固定为 9:16 黑底，中间放置一个与画面同宽的白色正方形；上下黑边各占 21.875%，与参考视频的 720×1280 构图一致。</p>
+          ) : <div className="backgroundControls">
             <label className="paletteUpload backgroundImageUpload">
               {backgroundImageUrl ? (
                 <img src={backgroundImageUrl} alt="自定义画面背景预览" />
@@ -1544,11 +1876,13 @@ function App() {
               <ColorField label="其他歌词" value={settings.nextColor} onChange={(value) => updateSetting('nextColor', value)} />
               <ColorField label="背景" value={settings.backgroundColor} onChange={(value) => updateSetting('backgroundColor', value)} disabled={settings.transparentBackground} />
             </div>
-          </div>
+          </div>}
 
           <div className="lyricControls">
             {settings.visualStyle === 'single' ? (
               <p className="singleLyricNote">每次只显示一句歌词：字形沿整行水波起伏并柔软回弹。可开启入场变速，让新歌词先从上方快速波动，再自然减速为慢波。</p>
+            ) : settings.visualStyle === 'tiktok' ? (
+              <p className="singleLyricNote">每句歌词预先排版后按单词硬切显现，每屏最多三行，长句会自动切到下一组。增强 LRC 直接使用原逐词时间；普通 LRC 会在相邻两句之间自动分配时间。</p>
             ) : (
               <>
             <div className="field highlightControl highlightModeControl">
@@ -1621,18 +1955,19 @@ function App() {
               <ToggleField
                 label="透明背景"
                 checked={settings.transparentBackground}
+                disabled={settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('transparentBackground', checked)}
               />
               <ToggleField
                 label="显示歌曲信息"
                 checked={settings.showMetadata}
-                disabled={settings.visualStyle === 'single'}
+                disabled={settings.visualStyle === 'single' || settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showMetadata', checked)}
               />
               <ToggleField
                 label="显示底部线型进度条"
                 checked={settings.showProgressBar}
-                disabled={settings.visualStyle === 'single'}
+                disabled={settings.visualStyle === 'single' || settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showProgressBar', checked)}
               />
               <ToggleField
@@ -1644,6 +1979,7 @@ function App() {
               <ToggleField
                 label="显示底部鼓点律动条"
                 checked={settings.showBeatBar}
+                disabled={settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showBeatBar', checked)}
               />
             </div>
@@ -1730,6 +2066,26 @@ function App() {
             <span aria-hidden="true">↓</span>
             {exportButtonLabel}
           </button>
+          {settings.visualStyle === 'tiktok' && (
+            <div className="tiktokFrameExport">
+              <div className="tiktokFrameExportHeader">
+                <div>
+                  <strong>逐词 PNG 序列</strong>
+                  <p>片段起始状态与每次新增词都会生成一张完整图片，统一打包为 ZIP。</p>
+                </div>
+                <span>{tiktokFrameCount} 张</span>
+              </div>
+              <button
+                className="tiktokFrameExportButton"
+                type="button"
+                onClick={() => void startTikTokFrameExport()}
+                disabled={isExporting || !hasValidSelection || tiktokFrameCount === 0}
+              >
+                <span aria-hidden="true">▣</span>
+                {isExporting ? `正在生成 ${Math.round(exportProgress * 100)}%` : '导出逐词 PNG（ZIP）'}
+              </button>
+            </div>
+          )}
           <div className="meter" aria-label="导出进度">
             <span style={{ width: `${Math.round(exportProgress * 100)}%` }} />
           </div>
@@ -1749,9 +2105,69 @@ function App() {
               下载 {exportResult.filename.endsWith('.mp4') ? 'MP4' : 'WebM'}
             </a>
           )}
+          {frameSequenceResult && settings.visualStyle === 'tiktok' && (
+            <a className="downloadButton" href={frameSequenceResult.url} download={frameSequenceResult.filename}>
+              <span aria-hidden="true">↓</span>
+              下载逐词 PNG 序列（{frameSequenceResult.frameCount} 张）
+            </a>
+          )}
         </section>
         </aside>
       </section>
+
+      {isPasteLyricsOpen && (
+        <div className="pasteLyricsBackdrop" role="presentation">
+          <section className="pasteLyricsDialog" role="dialog" aria-modal="true" aria-labelledby="pasteLyricsTitle">
+            <header>
+              <div>
+                <span>纯文本歌词</span>
+                <h2 id="pasteLyricsTitle">粘贴歌词并开始打轴</h2>
+                <p>每一行会成为一句歌词；空行会自动忽略。</p>
+              </div>
+              <button type="button" aria-label="关闭粘贴歌词窗口" onClick={() => setIsPasteLyricsOpen(false)}>×</button>
+            </header>
+            <textarea
+              autoFocus
+              value={pastedLyricsText}
+              placeholder={'把歌词粘贴到这里，例如：\n第一句歌词\n第二句歌词\n第三句歌词'}
+              onChange={(event) => {
+                setPastedLyricsText(event.target.value)
+                if (pasteLyricsError) setPasteLyricsError('')
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault()
+                  startTimingPastedLyrics()
+                }
+              }}
+            />
+            <footer>
+              <div>
+                <strong>{parsePlainTextLyrics(pastedLyricsText).length} 行歌词</strong>
+                <span className={pasteLyricsError ? 'pasteLyricsError' : ''}>{pasteLyricsError || '⌘/Ctrl + Enter 可直接进入打轴器'}</span>
+              </div>
+              <div>
+                <button type="button" onClick={() => setIsPasteLyricsOpen(false)}>取消</button>
+                <button className="pasteLyricsStartButton" type="button" disabled={parsePlainTextLyrics(pastedLyricsText).length === 0} onClick={startTimingPastedLyrics}>进入打轴器</button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {timingEditorSource && (
+        <TimingEditor
+          key={`${timingEditorSource.name}-${timingEditorSource.lines.length}`}
+          audioUrl={audioUrl}
+          audioFile={audioFileRef.current}
+          audioDuration={audioDuration}
+          sourceName={timingEditorSource.name}
+          metadata={timingEditorSource.metadata}
+          initialLines={timingEditorSource.lines}
+          onCancel={() => setTimingEditorSource(null)}
+          onApply={applyTimedLyrics}
+        />
+      )}
     </main>
   )
 }
@@ -1908,7 +2324,7 @@ function getTextElementRange(element: TextElement): { min: number; max: number }
   switch (element) {
     case 'currentLyric':
     case 'normalLyric':
-      return { min: 36, max: 120 }
+      return { min: 36, max: 200 }
     case 'title':
       return { min: 24, max: 72 }
     case 'artist':

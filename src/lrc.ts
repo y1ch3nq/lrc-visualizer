@@ -6,6 +6,7 @@ export interface LyricWord {
 export interface LyricLine {
   id: string
   time: number
+  endTime?: number
   text: string
   words: LyricWord[]
 }
@@ -19,6 +20,7 @@ export interface ParsedLrc {
 const timePattern = /(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?/
 const bracketTimePattern = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
 const wordTimePattern = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>([^<]*)/g
+const endTimePattern = /<end:(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/i
 const graphemeSegmenter = typeof Intl !== 'undefined' && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
   : null
@@ -103,15 +105,21 @@ export function parseLrc(text: string, encoding = 'UTF-8'): ParsedLrc {
     }
 
     const rawText = rawLine.replace(bracketTimePattern, '').trim()
-    const words = parseWordTags(rawText, offsetSeconds)
-    const textWithoutWordTags = rawText.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').trim()
-    const visibleText = textWithoutWordTags.length > 0 ? textWithoutWordTags : rawText.trim()
+    const endMatch = rawText.match(endTimePattern)
+    const explicitEndTime = endMatch
+      ? Math.max(0, parseTimeParts(endMatch[1], endMatch[2], endMatch[3]) + offsetSeconds)
+      : undefined
+    const contentText = rawText.replace(endTimePattern, '').trim()
+    const words = parseWordTags(contentText, offsetSeconds)
+    const textWithoutWordTags = contentText.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').trim()
+    const visibleText = textWithoutWordTags.length > 0 ? textWithoutWordTags : contentText.trim()
 
     for (const match of matches) {
       const time = parseTimeParts(match[1], match[2], match[3]) + offsetSeconds
       lines.push({
         id: `${sourceIndex}-${match.index ?? 0}`,
         time: Math.max(0, time),
+        endTime: explicitEndTime && explicitEndTime > time ? explicitEndTime : undefined,
         text: visibleText,
         words,
       })
@@ -134,24 +142,24 @@ export function getActiveLineIndex(lines: LyricLine[], currentTime: number): num
 
   let low = 0
   let high = lines.length - 1
+  let candidate = -1
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)
     const line = lines[mid]
-    const nextLine = lines[mid + 1]
-
-    if (currentTime >= line.time && (!nextLine || currentTime < nextLine.time)) {
-      return mid
-    }
 
     if (currentTime < line.time) {
       high = mid - 1
     } else {
+      candidate = mid
       low = mid + 1
     }
   }
 
-  return lines.length - 1
+  if (candidate < 0) {
+    return -1
+  }
+  return candidate
 }
 
 export function getLineProgress(
@@ -167,9 +175,11 @@ export function getLineProgress(
   }
 
   const nextLineTime = lines[index + 1]?.time
-  const endTime = nextLineTime && nextLineTime > line.time
-    ? nextLineTime
-    : Math.max(fallbackDuration, line.time + 1.5)
+  const explicitEndTime = line.endTime && line.endTime > line.time ? line.endTime : undefined
+  const endTime = explicitEndTime
+    ?? (nextLineTime && nextLineTime > line.time
+      ? nextLineTime
+      : Math.max(fallbackDuration, line.time + 1.5))
 
   if (currentTime <= line.time) {
     return 0
@@ -224,6 +234,55 @@ export function splitLyricGraphemes(text: string): string[] {
   }
 
   return Array.from(text)
+}
+
+export function parsePlainTextLyrics(text: string): string[] {
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+export function serializeExtendedLrc(
+  lines: LyricLine[],
+  metadata: Record<string, string> = {},
+): string {
+  const header = Object.entries(metadata)
+    .filter(([key, value]) => /^[a-z]+$/i.test(key) && value.trim().length > 0)
+    .map(([key, value]) => `[${key}:${value.trim()}]`)
+  const body = lines
+    .slice()
+    .sort((left, right) => left.time - right.time)
+    .map((line) => {
+      const lineTag = `[${formatLrcTimestamp(line.time)}]`
+      const endTag = line.endTime && line.endTime > line.time
+        ? `<end:${formatLrcTimestamp(line.endTime)}>`
+        : ''
+      const wordText = line.words.length > 0
+        ? serializeWordTags(line)
+        : line.text
+      return `${lineTag}${endTag}${wordText}`
+    })
+
+  return [...header, ...body, ''].join('\n')
+}
+
+export function formatLrcTimestamp(value: number): string {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0
+  const totalCentiseconds = Math.round(safeValue * 100)
+  const minutes = Math.floor(totalCentiseconds / 6_000)
+  const seconds = Math.floor((totalCentiseconds % 6_000) / 100)
+  const centiseconds = totalCentiseconds % 100
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`
+}
+
+function serializeWordTags(line: LyricLine): string {
+  const joiner = /\s/u.test(line.text) ? ' ' : ''
+  return line.words
+    .map((word) => `<${formatLrcTimestamp(word.time)}>${word.text.trim()}`)
+    .join(joiner)
 }
 
 function findGraphemeSequence(source: string[], target: string[], fromIndex: number): number {

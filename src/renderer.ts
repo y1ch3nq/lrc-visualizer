@@ -27,11 +27,17 @@ export interface VisualizerSettings {
   lineGap: number
   visibleLineCount: number
   lyricAlignment: 'center' | 'left'
-  visualStyle: 'classic' | 'soda' | 'single'
+  visualStyle: 'classic' | 'soda' | 'single' | 'tiktok'
+  tiktokTextBlur: number
   singleWaveSpeedRamp: boolean
   showBeatBar: boolean
   showMetadata: boolean
   showProgressBar: boolean
+}
+
+export interface TikTokWordFrameTimelineEntry {
+  time: number
+  kind: 'range-start' | 'word-reveal'
 }
 
 interface DrawInput {
@@ -122,6 +128,29 @@ interface SingleAtmosphereCoverCache {
   coverImage: CanvasImageSource
 }
 
+interface TikTokWordLayout {
+  tokenIndex: number
+  metrics: PreparedText
+}
+
+interface TikTokRowLayout {
+  words: TikTokWordLayout[]
+  contentWidth: number
+}
+
+interface TikTokPageLayout {
+  rows: TikTokRowLayout[]
+  firstTokenIndex: number
+}
+
+interface TikTokLyricLayout {
+  fontSize: number
+  lineHeight: number
+  maxWidth: number
+  pages: TikTokPageLayout[]
+  tokenCount: number
+}
+
 interface CustomBackgroundCache {
   canvas: OffscreenCanvas | HTMLCanvasElement
   width: number
@@ -139,6 +168,8 @@ const sodaUiChineseFont = '"Douyin Sans", "PingFang SC", "Hiragino Sans GB", "Mi
 const sodaUiEnglishFont = '"SF Pro Display", Inter, Arial, sans-serif'
 const lyricLayoutCache = new Map<string, PreparedLine>()
 const lyricLayoutCacheLimit = 720
+const tiktokLayoutCache = new Map<string, TikTokLyricLayout>()
+const tiktokLayoutCacheLimit = 360
 const lyricWeight = 600
 let singleAtmosphereCoverCache: SingleAtmosphereCoverCache | null = null
 let customBackgroundCache: CustomBackgroundCache | null = null
@@ -169,7 +200,7 @@ export function drawVisualizer(input: DrawInput): void {
 
   drawBackground(ctx, settings, coverImage, backgroundImage, currentTime, renderScale)
 
-  if (settings.showMetadata && settings.visualStyle !== 'single') {
+  if (settings.showMetadata && settings.visualStyle !== 'single' && settings.visualStyle !== 'tiktok') {
     if (settings.visualStyle === 'soda') {
       drawSodaMetadata(ctx, settings, title, artist, coverImage, brandIconImage, sodaBrandText, sodaPlaylistText)
     } else {
@@ -183,6 +214,8 @@ export function drawVisualizer(input: DrawInput): void {
   if (focusIndex >= 0) {
     if (settings.visualStyle === 'single') {
       drawSingleLyric(ctx, lines, focusIndex, activeIndex, currentTime, settings)
+    } else if (settings.visualStyle === 'tiktok') {
+      drawTikTokLyric(ctx, lines, focusIndex, activeIndex, currentTime, duration, settings)
     } else {
       drawLyricRail(ctx, lines, focusIndex, activeIndex, currentTime, duration, settings)
     }
@@ -190,11 +223,11 @@ export function drawVisualizer(input: DrawInput): void {
     drawEmptyState(ctx, settings)
   }
 
-  if (settings.showProgressBar && settings.visualStyle !== 'single') {
+  if (settings.showProgressBar && settings.visualStyle !== 'single' && settings.visualStyle !== 'tiktok') {
     drawProgressBar(ctx, settings, currentTime, duration)
   }
 
-  if (settings.showBeatBar) {
+  if (settings.showBeatBar && settings.visualStyle !== 'tiktok') {
     drawBeatReactiveBar(ctx, settings, currentTime, clamp(input.beatStrength ?? 0))
   }
 }
@@ -211,6 +244,54 @@ export function fitCanvasToSettings(
     canvas.width = targetWidth
     canvas.height = targetHeight
   }
+}
+
+/**
+ * Returns the static visual states needed for the black-and-white TikTok
+ * template: one at the beginning of the selected range when necessary, then
+ * one whenever one or more lyric tokens become visible.
+ */
+export function getTikTokWordFrameTimeline(
+  lines: LyricLine[],
+  duration: number,
+  rangeStart: number,
+  rangeEnd: number,
+): TikTokWordFrameTimelineEntry[] {
+  const safeStart = Math.max(0, Math.min(rangeStart, rangeEnd))
+  const safeEnd = Math.max(safeStart, Math.max(rangeStart, rangeEnd))
+  const events = new Map<string, number>()
+
+  lines.forEach((line, index) => {
+    const nextLineTime = lines[index + 1]?.time
+    const displayEndTime = nextLineTime ?? Math.max(duration, line.time + 2.4)
+    const explicitRevealEndTime = line.endTime && line.endTime > line.time
+      ? line.endTime
+      : undefined
+    const revealEndTime = explicitRevealEndTime
+      ? Math.min(displayEndTime, explicitRevealEndTime)
+      : displayEndTime
+    const tokenCount = tokenizeTikTokText(line.text).length
+    if (tokenCount === 0) {
+      return
+    }
+
+    resolveTikTokRevealTimes(line, tokenCount, revealEndTime).forEach((time) => {
+      if (time < safeStart - 0.0005 || time > safeEnd + 0.0005) {
+        return
+      }
+      const boundedTime = Math.max(safeStart, Math.min(safeEnd, time))
+      events.set(boundedTime.toFixed(5), boundedTime)
+    })
+  })
+
+  const revealTimes = Array.from(events.values()).sort((left, right) => left - right)
+  const needsRangeStart = revealTimes.length === 0 || Math.abs(revealTimes[0] - safeStart) > 0.0005
+  const timeline: TikTokWordFrameTimelineEntry[] = needsRangeStart
+    ? [{ time: safeStart, kind: 'range-start' }]
+    : []
+
+  timeline.push(...revealTimes.map((time) => ({ time, kind: 'word-reveal' as const })))
+  return timeline
 }
 
 function drawLyricRail(
@@ -423,6 +504,311 @@ function drawSingleLyric(
     intensity: activeWaveTiming.intensity,
   })
   ctx.restore()
+}
+
+function drawTikTokLyric(
+  ctx: VisualizerCanvasContext,
+  lines: LyricLine[],
+  focusIndex: number,
+  activeIndex: number,
+  currentTime: number,
+  duration: number,
+  settings: VisualizerSettings,
+): void {
+  const index = activeIndex >= 0 ? activeIndex : focusIndex
+  const line = lines[index]
+
+  if (!line || currentTime < line.time) {
+    return
+  }
+
+  const followingLineTime = lines[index + 1]?.time
+  const displayEndTime = followingLineTime ?? Math.max(duration, line.time + 2.4)
+  const explicitRevealEndTime = line.endTime && line.endTime > line.time
+    ? line.endTime
+    : undefined
+  const revealEndTime = explicitRevealEndTime
+    ? Math.min(displayEndTime, explicitRevealEndTime)
+    : displayEndTime
+
+  if (currentTime >= displayEndTime) {
+    return
+  }
+
+  const layout = getTikTokLyricLayout(ctx, line.text, settings)
+  if (layout.tokenCount === 0 || layout.pages.length === 0) {
+    return
+  }
+
+  const revealTimes = resolveTikTokRevealTimes(line, layout.tokenCount, revealEndTime)
+  let activePage = layout.pages[0]
+  for (const page of layout.pages) {
+    if (currentTime + 0.008 >= (revealTimes[page.firstTokenIndex] ?? line.time)) {
+      activePage = page
+    } else {
+      break
+    }
+  }
+  const x = settings.width * 0.24
+  const firstBaseline = settings.height / 2 - (activePage.rows.length - 1) * layout.lineHeight / 2
+  const panelHeight = Math.min(settings.width, settings.height)
+  const panelTop = (settings.height - panelHeight) / 2
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, panelTop, settings.width, panelHeight)
+  ctx.clip()
+  ctx.fillStyle = settings.lyricColor || '#050505'
+  if (settings.tiktokTextBlur > 0) {
+    ctx.filter = `blur(${clampNumber(settings.tiktokTextBlur, 0, 12).toFixed(2)}px)`
+  }
+
+  activePage.rows.forEach((row, rowIndex) => {
+    const visibleWords = row.words.filter((word) => currentTime + 0.008 >= (revealTimes[word.tokenIndex] ?? line.time))
+    if (visibleWords.length === 0) {
+      return
+    }
+
+    const isLastRow = rowIndex === activePage.rows.length - 1
+    const gapCount = Math.max(0, row.words.length - 1)
+    const naturalGap = measureText(ctx, ' ', settings, layout.fontSize, 400)
+    const justifiedGap = !isLastRow && gapCount > 0
+      ? Math.max(naturalGap, (layout.maxWidth - row.contentWidth) / gapCount)
+      : naturalGap
+    let cursorX = x
+
+    row.words.forEach((word, wordIndex) => {
+      if (currentTime + 0.008 >= (revealTimes[word.tokenIndex] ?? line.time)) {
+        drawMixedTextWithMetrics(
+          ctx,
+          word.metrics,
+          cursorX,
+          firstBaseline + rowIndex * layout.lineHeight,
+          settings.lyricColor || '#050505',
+          false,
+        )
+      }
+
+      cursorX += word.metrics.width
+      if (wordIndex < row.words.length - 1) {
+        cursorX += justifiedGap
+      }
+    })
+  })
+
+  ctx.restore()
+}
+
+function getTikTokLyricLayout(
+  ctx: VisualizerCanvasContext,
+  text: string,
+  settings: VisualizerSettings,
+): TikTokLyricLayout {
+  const cacheKey = [
+    text,
+    settings.width,
+    settings.height,
+    settings.fontSize,
+    settings.chineseFont,
+    settings.englishFont,
+  ].join('\u0001')
+  const cached = tiktokLayoutCache.get(cacheKey)
+
+  if (cached) {
+    tiktokLayoutCache.delete(cacheKey)
+    tiktokLayoutCache.set(cacheKey, cached)
+    return cached
+  }
+
+  const tokens = tokenizeTikTokText(text)
+  const maxWidth = settings.width * 0.47
+  let fontSize = clampNumber(settings.fontSize, 36, settings.width * 0.19)
+  let rows: TikTokRowLayout[] = []
+
+  while (fontSize >= 36) {
+    rows = buildTikTokRows(ctx, tokens, maxWidth, fontSize, settings)
+    const widestWord = rows.reduce(
+      (maximum, row) => Math.max(maximum, ...row.words.map((word) => word.metrics.width)),
+      0,
+    )
+    if (widestWord <= maxWidth) {
+      break
+    }
+    fontSize *= 0.92
+  }
+
+  rows = rebalanceTikTokOrphanRow(rows, maxWidth, settings, fontSize, ctx)
+  const pages = paginateTikTokRows(rows)
+
+  const layout: TikTokLyricLayout = {
+    fontSize,
+    lineHeight: fontSize * 1.035,
+    maxWidth,
+    pages,
+    tokenCount: tokens.length,
+  }
+
+  if (tiktokLayoutCache.size >= tiktokLayoutCacheLimit) {
+    const oldestKey = tiktokLayoutCache.keys().next().value
+    if (oldestKey) {
+      tiktokLayoutCache.delete(oldestKey)
+    }
+  }
+  tiktokLayoutCache.set(cacheKey, layout)
+  return layout
+}
+
+function buildTikTokRows(
+  ctx: VisualizerCanvasContext,
+  tokens: string[],
+  maxWidth: number,
+  fontSize: number,
+  settings: VisualizerSettings,
+): TikTokRowLayout[] {
+  const naturalGap = measureText(ctx, ' ', settings, fontSize, 400)
+  const rows: TikTokRowLayout[] = []
+  let words: TikTokWordLayout[] = []
+  let contentWidth = 0
+
+  tokens.forEach((token, tokenIndex) => {
+    const segments = segmentText(token, settings, fontSize, 400)
+    const metrics: PreparedText = {
+      segments,
+      size: fontSize,
+      width: measureSegments(ctx, segments),
+    }
+    const proposedWidth = contentWidth
+      + (words.length > 0 ? naturalGap : 0)
+      + metrics.width
+
+    if (words.length > 0 && proposedWidth > maxWidth) {
+      rows.push({ words, contentWidth })
+      words = []
+      contentWidth = 0
+    }
+
+    if (words.length > 0) {
+      contentWidth += naturalGap
+    }
+    words.push({ tokenIndex, metrics })
+    contentWidth += metrics.width
+  })
+
+  if (words.length > 0) {
+    rows.push({ words, contentWidth })
+  }
+
+  return rows
+}
+
+function rebalanceTikTokOrphanRow(
+  rows: TikTokRowLayout[],
+  maxWidth: number,
+  settings: VisualizerSettings,
+  fontSize: number,
+  ctx: VisualizerCanvasContext,
+): TikTokRowLayout[] {
+  if (rows.length < 2) {
+    return rows
+  }
+
+  const lastRow = rows[rows.length - 1]
+  const previousRow = rows[rows.length - 2]
+  if (lastRow.words.length !== 1 || previousRow.words.length < 2) {
+    return rows
+  }
+
+  const naturalGap = measureText(ctx, ' ', settings, fontSize, 400)
+  let best: { previous: TikTokRowLayout; last: TikTokRowLayout; score: number } | null = null
+
+  for (let moveCount = 1; moveCount < previousRow.words.length; moveCount += 1) {
+    const splitIndex = previousRow.words.length - moveCount
+    const previousWords = previousRow.words.slice(0, splitIndex)
+    const lastWords = [...previousRow.words.slice(splitIndex), ...lastRow.words]
+    const previousWidth = getTikTokRowContentWidth(previousWords, naturalGap)
+    const lastWidth = getTikTokRowContentWidth(lastWords, naturalGap)
+
+    if (previousWidth > maxWidth || lastWidth > maxWidth) {
+      continue
+    }
+
+    const singleWordPenalty = previousWords.length === 1 ? maxWidth * 0.24 : 0
+    const score = Math.abs(previousWidth - lastWidth) + singleWordPenalty
+    if (!best || score < best.score) {
+      best = {
+        previous: { words: previousWords, contentWidth: previousWidth },
+        last: { words: lastWords, contentWidth: lastWidth },
+        score,
+      }
+    }
+  }
+
+  if (!best) {
+    return rows
+  }
+
+  return [...rows.slice(0, -2), best.previous, best.last]
+}
+
+function getTikTokRowContentWidth(words: TikTokWordLayout[], gap: number): number {
+  return words.reduce((sum, word) => sum + word.metrics.width, 0)
+    + Math.max(0, words.length - 1) * gap
+}
+
+function paginateTikTokRows(rows: TikTokRowLayout[]): TikTokPageLayout[] {
+  const pages: TikTokPageLayout[] = []
+  let rowIndex = 0
+
+  while (rowIndex < rows.length) {
+    const remaining = rows.length - rowIndex
+    const pageSize = remaining === 4 ? 2 : Math.min(3, remaining)
+    const pageRows = rows.slice(rowIndex, rowIndex + pageSize)
+    pages.push({
+      rows: pageRows,
+      firstTokenIndex: pageRows[0]?.words[0]?.tokenIndex ?? 0,
+    })
+    rowIndex += pageSize
+  }
+
+  return pages
+}
+
+function tokenizeTikTokText(text: string): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return []
+  }
+
+  const spacedTokens = trimmed.match(/\S+/gu) ?? []
+  if (spacedTokens.length > 1 || !Array.from(trimmed).some(isCjk)) {
+    return spacedTokens
+  }
+
+  return splitLyricGraphemes(trimmed).filter((token) => !isWhitespace(token))
+}
+
+function resolveTikTokRevealTimes(line: LyricLine, tokenCount: number, nextLineTime: number): number[] {
+  const explicitTimes = line.words.flatMap((word) => {
+    const count = Math.max(1, tokenizeTikTokText(word.text).length)
+    return Array.from({ length: count }, () => word.time)
+  })
+
+  if (explicitTimes.length >= tokenCount) {
+    return explicitTimes.slice(0, tokenCount).map((time) => Math.min(nextLineTime - 0.01, Math.max(line.time, time)))
+  }
+
+  const tokens = tokenizeTikTokText(line.text)
+  const lineDuration = Math.max(0.24, nextLineTime - line.time)
+  const revealSpan = Math.max(0.08, lineDuration * 0.82)
+  const weights = tokens.map((token) => Math.max(1, Math.sqrt(splitLyricGraphemes(token).length)))
+  const totalWeight = Math.max(1, weights.reduce((sum, weight) => sum + weight, 0))
+  let elapsedWeight = 0
+
+  return Array.from({ length: tokenCount }, (_, index) => {
+    const time = line.time + revealSpan * elapsedWeight / totalWeight
+    elapsedWeight += weights[index] ?? 1
+    return time
+  })
 }
 
 function getSingleLyricSettings(settings: VisualizerSettings): VisualizerSettings {
@@ -1015,6 +1401,16 @@ function drawBackground(
   currentTime = 0,
   renderScale = 1,
 ): void {
+  if (settings.visualStyle === 'tiktok') {
+    const panelHeight = Math.min(settings.width, settings.height)
+    const panelTop = (settings.height - panelHeight) / 2
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(0, 0, settings.width, settings.height)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, panelTop, settings.width, panelHeight)
+    return
+  }
+
   if (settings.transparentBackground) {
     return
   }
