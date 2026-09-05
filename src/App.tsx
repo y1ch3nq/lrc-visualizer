@@ -34,6 +34,12 @@ import {
   exportTikTokWordFrames,
   type TikTokFrameExportResult,
 } from './tiktok-frame-export.ts'
+import {
+  getInitialUiLanguage,
+  localizeErrorMessage,
+  pickUiText,
+  type UiLanguage,
+} from './ui-language.ts'
 
 interface ImportedFont {
   id: string
@@ -92,6 +98,10 @@ const minimumExportDuration = 0.1
 const defaultPalette = palettePresets[0]
 
 function App() {
+  const [language, setLanguage] = useState<UiLanguage>(getInitialUiLanguage)
+  const ui = useCallback((chinese: string, english: string) => (
+    pickUiText(language, chinese, english)
+  ), [language])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -119,7 +129,7 @@ function App() {
   const [parsedLrc, setParsedLrc] = useState<ParsedLrc>(fallbackLrc)
   const [lrcFileName, setLrcFileName] = useState('')
   const [lrcEncoding, setLrcEncoding] = useState('')
-  const [fontStatus, setFontStatus] = useState('未导入字体')
+  const [fontStatus, setFontStatus] = useState(() => pickUiText(language, '未导入字体', 'No font imported'))
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
   const [settings, setSettings] = useState<VisualizerSettings>({
     width: 1080,
@@ -153,7 +163,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
   const [exportCurrentTime, setExportCurrentTime] = useState(0)
-  const [exportStatus, setExportStatus] = useState('等待导出')
+  const [exportStatus, setExportStatus] = useState(() => pickUiText(language, '等待导出', 'Ready to export'))
   const [isExporting, setIsExporting] = useState(false)
   const [exportRangeMode, setExportRangeMode] = useState<ExportRangeMode>('full')
   const [exportStartTime, setExportStartTime] = useState(0)
@@ -163,7 +173,7 @@ function App() {
   const [frameSequenceResult, setFrameSequenceResult] = useState<TikTokFrameExportResult | null>(null)
   const [paletteImageUrl, setPaletteImageUrl] = useState('')
   const [paletteSourceName, setPaletteSourceName] = useState('')
-  const [paletteStatus, setPaletteStatus] = useState('上传画面截图，自动生成协调的歌词颜色')
+  const [paletteStatus, setPaletteStatus] = useState(() => pickUiText(language, '上传画面截图，自动生成协调的歌词颜色', 'Upload a reference image to generate a coordinated lyric palette'))
   const [paletteSwatches, setPaletteSwatches] = useState([
     defaultPalette.backgroundColor,
     defaultPalette.progressColor,
@@ -187,45 +197,73 @@ function App() {
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
   const [activeStyleTab, setActiveStyleTab] = useState<'scene' | 'lyrics' | 'typeMotion'>('lyrics')
   const [activeTextElement, setActiveTextElement] = useState<TextElement>('currentLyric')
-  const [saveStatus, setSaveStatus] = useState('正在保存')
+  const [saveStatus, setSaveStatus] = useState(() => pickUiText(language, '正在保存', 'Saving'))
   const [isPromoExpanded, setIsPromoExpanded] = useState(false)
   const [sodaBrandText, setSodaBrandText] = useState('汽水音乐 · 抖音官方音乐App')
   const [sodaPlaylistText, setSodaPlaylistText] = useState('查看我的今日歌单')
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 0, height: 0 })
   const [audioAnalysisVersion, setAudioAnalysisVersion] = useState(0)
-  const [beatAnalysisStatus, setBeatAnalysisStatus] = useState('导入音频后分析低频鼓点')
+  const [beatAnalysisStatus, setBeatAnalysisStatus] = useState(() => pickUiText(language, '导入音频后分析低频鼓点', 'Import audio to analyze low-frequency beats'))
   const [timingEditorSource, setTimingEditorSource] = useState<TimingEditorSource | null>(null)
   const [isPasteLyricsOpen, setIsPasteLyricsOpen] = useState(false)
   const [pastedLyricsText, setPastedLyricsText] = useState('')
   const [pasteLyricsError, setPasteLyricsError] = useState('')
   const [isAligningLyrics, setIsAligningLyrics] = useState(false)
 
+  useEffect(() => {
+    document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN'
+    try {
+      window.localStorage.setItem('lrc-visualizer-language', language)
+    } catch {
+      // Language persistence is optional when storage is unavailable.
+    }
+  }, [language])
+
+  useEffect(() => {
+    setSaveStatus(pickUiText(language, '实时预览', 'Live preview'))
+    setExportStatus(isExporting
+      ? pickUiText(language, `正在导出 ${Math.round(exportProgress * 100)}%`, `Exporting ${Math.round(exportProgress * 100)}%`)
+      : pickUiText(language, '等待导出', 'Ready to export'))
+    setPaletteStatus(paletteSourceName
+      ? pickUiText(language, `已从 ${paletteSourceName} 生成配色`, `Palette generated from ${paletteSourceName}`)
+      : pickUiText(language, '上传画面截图，自动生成协调的歌词颜色', 'Upload a reference image to generate a coordinated lyric palette'))
+    setFontStatus(importedFontsRef.current.length > 0
+      ? pickUiText(language, `已导入：${importedFontsRef.current.at(-1)?.name ?? ''}`, `Imported: ${importedFontsRef.current.at(-1)?.name ?? ''}`)
+      : pickUiText(language, '未导入字体', 'No font imported'))
+    setBeatAnalysisStatus(audioUrlRef.current
+      ? pickUiText(language, '鼓点分析状态与当前音频保持同步', 'Beat analysis stays synchronized with the current audio')
+      : pickUiText(language, '导入音频后分析低频鼓点', 'Import audio to analyze low-frequency beats'))
+    setPasteLyricsError((current) => current
+      ? pickUiText(language, '请至少粘贴一行歌词。', 'Paste at least one lyric line.')
+      : '')
+  }, [language])
+
   const title = songTitle.trim() || parsedLrc.metadata.ti || parsedLrc.metadata.title || stripExtension(lrcFileName || audioFileName)
   const artist = songArtist.trim() || parsedLrc.metadata.ar || parsedLrc.metadata.artist || ''
   const fontOptions = useMemo(
     () => [
-      { label: '系统中文', value: chineseSystemFont },
-      { label: '系统英文', value: englishSystemFont },
-      { label: 'Arial Narrow（TikTok 参考）', value: tiktokReferenceFont },
+      { label: ui('系统中文', 'System Chinese'), value: chineseSystemFont },
+      { label: ui('系统英文', 'System English'), value: englishSystemFont },
+      { label: ui('Arial Narrow（TikTok 参考）', 'Arial Narrow (TikTok reference)'), value: tiktokReferenceFont },
       ...importedFonts.map((font) => ({ label: font.name, value: quoteFontFamily(font.family) })),
     ],
-    [importedFonts],
+    [importedFonts, ui],
   )
   const activeTextElementLabel = {
-    currentLyric: '当前歌词',
-    normalLyric: '普通歌词',
-    title: '歌名',
-    artist: '歌手',
-    brand: '顶部宣传栏',
-    playlist: '歌单入口',
+    currentLyric: ui('当前歌词', 'Current lyric'),
+    normalLyric: ui('普通歌词', 'Inactive lyrics'),
+    title: ui('歌名', 'Song title'),
+    artist: ui('歌手', 'Artist'),
+    brand: ui('顶部宣传栏', 'Top banner'),
+    playlist: ui('歌单入口', 'Playlist link'),
   }[activeTextElement]
   const activeTextSize = resolveTextElementSize(settings, activeTextElement)
   const activeTextColor = resolveTextElementColor(settings, activeTextElement)
   const backgroundFitDescription = backgroundImageSize
     ? `${backgroundImageSize.width}×${backgroundImageSize.height} · ${isMatchingAspectRatio(backgroundImageSize, settings)
-      ? `匹配当前 ${formatAspectRatio(settings.width, settings.height)} 画幅`
-      : `将自动居中裁切为 ${formatAspectRatio(settings.width, settings.height)}`}`
-    : '建议上传与输出画幅相同比例的图片；其他比例会自动居中裁切'
+      ? ui(`匹配当前 ${formatAspectRatio(settings.width, settings.height)} 画幅`, `Matches the current ${formatAspectRatio(settings.width, settings.height)} canvas`)
+      : ui(`将自动居中裁切为 ${formatAspectRatio(settings.width, settings.height)}`, `Will be center-cropped to ${formatAspectRatio(settings.width, settings.height)}`)}`
+    : ui('建议上传与输出画幅相同比例的图片；其他比例会自动居中裁切', 'Use an image matching the output ratio when possible; other ratios are center-cropped automatically')
 
   const renderFrame = useCallback((time = currentTimeRef.current) => {
     const canvas = canvasRef.current
@@ -281,9 +319,9 @@ function App() {
       if (typeof draft.songArtist === 'string') setSongArtist(draft.songArtist)
       if (typeof draft.sodaBrandText === 'string') setSodaBrandText(draft.sodaBrandText)
       if (typeof draft.sodaPlaylistText === 'string') setSodaPlaylistText(draft.sodaPlaylistText)
-      setSaveStatus('已恢复上次编辑')
+      setSaveStatus(pickUiText(language, '已恢复上次编辑', 'Previous edit restored'))
     } catch {
-      setSaveStatus('实时预览')
+      setSaveStatus(pickUiText(language, '实时预览', 'Live preview'))
     }
   }, [])
 
@@ -301,14 +339,14 @@ function App() {
           sodaBrandText,
           sodaPlaylistText,
         }))
-        setSaveStatus('已自动保存')
+        setSaveStatus(ui('已自动保存', 'Autosaved'))
       } catch {
-        setSaveStatus('实时预览')
+        setSaveStatus(ui('实时预览', 'Live preview'))
       }
     }, 420)
 
     return () => window.clearTimeout(timer)
-  }, [settings, sodaBrandText, sodaPlaylistText, songArtist, songTitle])
+  }, [settings, sodaBrandText, sodaPlaylistText, songArtist, songTitle, ui])
 
   useEffect(() => {
     if (!coverUrl) {
@@ -610,7 +648,7 @@ function App() {
       return
     }
 
-    setPaletteStatus('正在进行感知色彩分析…')
+    setPaletteStatus(ui('正在进行感知色彩分析…', 'Analyzing perceptual colors…'))
 
     try {
       const result = await extractImagePalette(file)
@@ -626,9 +664,14 @@ function App() {
       setPaletteSwatches(result.swatches)
       applyPalette(result.palette)
       setPaletteSwatches(result.swatches)
-      setPaletteStatus(`已从 ${file.name} 提取 ${result.swatches.length} 个主色，并自动匹配歌词层级`)
+      setPaletteStatus(ui(
+        `已从 ${file.name} 提取 ${result.swatches.length} 个主色，并自动匹配歌词层级`,
+        `Extracted ${result.swatches.length} key colors from ${file.name} and matched them to the lyric hierarchy`,
+      ))
     } catch (error) {
-      setPaletteStatus(error instanceof Error ? error.message : '图片配色分析失败')
+      setPaletteStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('图片配色分析失败', 'Image palette analysis failed'))
     }
   }
 
@@ -659,7 +702,7 @@ function App() {
         await shell.requestFullscreen()
       }
     } catch {
-      setExportStatus('当前浏览器无法进入全屏预览')
+      setExportStatus(ui('当前浏览器无法进入全屏预览', 'This browser cannot enter full-screen preview'))
     }
   }
 
@@ -748,12 +791,12 @@ function App() {
     audioFileRef.current = file
     audioReactiveEnvelopeRef.current = null
     setAudioAnalysisVersion((version) => version + 1)
-    setBeatAnalysisStatus('正在分析低频鼓点…')
+    setBeatAnalysisStatus(ui('正在分析低频鼓点…', 'Analyzing low-frequency beats…'))
     setAudioUrl(url)
     setAudioFileName(file.name)
     setSongTitle(stripExtension(file.name))
     setSongArtist('')
-    setExportStatus('音频已载入')
+    setExportStatus(ui('音频已载入', 'Audio loaded'))
     currentTimeRef.current = 0
     setExportRangeMode('full')
     setExportStartTime(0)
@@ -765,12 +808,12 @@ function App() {
 
       audioReactiveEnvelopeRef.current = envelope
       setAudioAnalysisVersion((version) => version + 1)
-      setBeatAnalysisStatus('鼓点分析完成，预览与导出将保持同步')
+      setBeatAnalysisStatus(ui('鼓点分析完成，预览与导出将保持同步', 'Beat analysis complete; preview and export will stay in sync'))
     }).catch(() => {
       if (audioUrlRef.current === url) {
         audioReactiveEnvelopeRef.current = null
         setAudioAnalysisVersion((version) => version + 1)
-        setBeatAnalysisStatus('未能分析鼓点，律动条将保持静止')
+        setBeatAnalysisStatus(ui('未能分析鼓点，律动条将保持静止', 'Beat analysis failed; the reactive bar will remain still'))
       }
     })
 
@@ -787,7 +830,7 @@ function App() {
       }
       if (metadata.cover) {
         replaceCover(metadata.cover, 'MP3 内嵌封面')
-        setExportStatus('音频已载入 · 已读取内嵌标题、歌手或封面')
+        setExportStatus(ui('音频已载入 · 已读取内嵌标题、歌手或封面', 'Audio loaded · Embedded title, artist, or artwork found'))
       }
     }).catch(() => {
       // Metadata is an optional enhancement; unsupported files should still import normally.
@@ -811,14 +854,16 @@ function App() {
       if (parsed.metadata.ar || parsed.metadata.artist) {
         setSongArtist(parsed.metadata.ar || parsed.metadata.artist)
       }
-      setExportStatus(`歌词已载入：${parsed.lines.length} 行`)
+      setExportStatus(ui(`歌词已载入：${parsed.lines.length} 行`, `Lyrics loaded: ${parsed.lines.length} lines`))
       currentTimeRef.current = 0
 
       if (audioRef.current) {
         audioRef.current.currentTime = 0
       }
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : 'LRC 文件读取失败')
+      setExportStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('LRC 文件读取失败', 'Unable to read the LRC file'))
     }
   }
 
@@ -853,7 +898,7 @@ function App() {
       const decoded = await decodeLrcFile(file)
       const textLines = parsePlainTextLyrics(decoded.text)
       if (textLines.length === 0) {
-        setExportStatus('TXT 中没有可用的歌词行')
+        setExportStatus(ui('TXT 中没有可用的歌词行', 'The TXT file contains no usable lyric lines'))
         return
       }
       openTimingEditor({
@@ -866,9 +911,14 @@ function App() {
           words: [],
         })),
       })
-      setExportStatus(`已读取 ${textLines.length} 行纯文本歌词，请在打轴器中标记时间`)
+      setExportStatus(ui(
+        `已读取 ${textLines.length} 行纯文本歌词，请在打轴器中标记时间`,
+        `Loaded ${textLines.length} plain-text lyric lines. Add timing in the timing editor.`,
+      ))
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : 'TXT 文件读取失败')
+      setExportStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('TXT 文件读取失败', 'Unable to read the TXT file'))
     }
   }
 
@@ -885,12 +935,12 @@ function App() {
   const startTimingPastedLyrics = () => {
     const textLines = parsePlainTextLyrics(pastedLyricsText)
     if (textLines.length === 0) {
-      setPasteLyricsError('请至少粘贴一行歌词。')
+      setPasteLyricsError(ui('请至少粘贴一行歌词。', 'Paste at least one lyric line.'))
       return
     }
 
     openTimingEditor({
-      name: '粘贴歌词.txt',
+      name: ui('粘贴歌词.txt', 'pasted-lyrics.txt'),
       encoding: 'UTF-8',
       metadata: {},
       lines: textLines.map((text, index) => ({
@@ -901,7 +951,10 @@ function App() {
     })
     setPastedLyricsText('')
     setPasteLyricsError('')
-    setExportStatus(`已读取 ${textLines.length} 行粘贴歌词，请在打轴器中标记时间`)
+    setExportStatus(ui(
+      `已读取 ${textLines.length} 行粘贴歌词，请在打轴器中标记时间`,
+      `Loaded ${textLines.length} pasted lyric lines. Add timing in the timing editor.`,
+    ))
   }
 
   const applyTimedLyrics = (lines: LyricLine[], sourceName: string) => {
@@ -927,29 +980,37 @@ function App() {
       audioRef.current.currentTime = 0
     }
     setTimingEditorSource(null)
-    setExportStatus(`打轴已应用：${lines.length} 行${lines.some((line) => line.endTime !== undefined) ? ' · 含独立句尾' : ''}`)
+    setExportStatus(ui(
+      `打轴已应用：${lines.length} 行${lines.some((line) => line.endTime !== undefined) ? ' · 含独立句尾' : ''}`,
+      `Timing applied: ${lines.length} lines${lines.some((line) => line.endTime !== undefined) ? ' · Includes explicit line ends' : ''}`,
+    ))
   }
 
   const alignCurrentLyricsLocally = async () => {
     const audioFile = audioFileRef.current
     if (!audioFile) {
-      setExportStatus('请先导入音频，再运行本地逐词对齐')
+      setExportStatus(ui('请先导入音频，再运行本地逐词对齐', 'Import audio before running local word alignment'))
       return
     }
     if (parsedLrc.lines.length === 0) {
-      setExportStatus('请先导入或打轴歌词')
+      setExportStatus(ui('请先导入或打轴歌词', 'Import or time lyrics first'))
       return
     }
 
     audioRef.current?.pause()
     setIsAligningLyrics(true)
-    setExportStatus('正在浏览器内分析声音起点并生成逐词时间…')
+    setExportStatus(ui('正在浏览器内分析声音起点并生成逐词时间…', 'Analyzing sound onsets and generating word timing in your browser…'))
     try {
       const result = await alignLyricsToAudio(audioFile, parsedLrc.lines, audioDuration)
       setParsedLrc((current) => ({ ...current, lines: result.lines }))
-      setExportStatus(`本地逐词对齐完成：${result.alignedLineCount} 句 · 参考置信度 ${Math.round(result.confidence * 100)}%`)
+      setExportStatus(ui(
+        `本地逐词对齐完成：${result.alignedLineCount} 句 · 参考置信度 ${Math.round(result.confidence * 100)}%`,
+        `Local word alignment complete: ${result.alignedLineCount} lines · ${Math.round(result.confidence * 100)}% reference confidence`,
+      ))
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : '本地逐词对齐失败')
+      setExportStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('本地逐词对齐失败', 'Local word alignment failed'))
     } finally {
       setIsAligningLyrics(false)
     }
@@ -974,9 +1035,9 @@ function App() {
       }
       importedFontsRef.current = [...importedFontsRef.current, importedFont]
       setImportedFonts((current) => [...current, importedFont])
-      setFontStatus(`已导入：${file.name}`)
+      setFontStatus(ui(`已导入：${file.name}`, `Imported: ${file.name}`))
     } catch {
-      setFontStatus('字体导入失败，请确认是 ttf/otf/woff/woff2')
+      setFontStatus(ui('字体导入失败，请确认是 ttf/otf/woff/woff2', 'Font import failed. Use a TTF, OTF, WOFF, or WOFF2 file.'))
     }
   }
 
@@ -1063,12 +1124,12 @@ function App() {
 
   const startExport = async () => {
     if (!audioUrl || !audioFileName) {
-      setExportStatus('请先导入音频')
+      setExportStatus(ui('请先导入音频', 'Import audio first'))
       return
     }
 
     if (parsedLrc.lines.length === 0) {
-      setExportStatus('请先导入 LRC 歌词')
+      setExportStatus(ui('请先导入 LRC 歌词', 'Import LRC lyrics first'))
       return
     }
 
@@ -1080,14 +1141,16 @@ function App() {
       : audioDuration
 
     if (rangeEnd - rangeStart < minimumExportDuration) {
-      setExportStatus('结束点必须晚于开始点至少 0.1 秒')
+      setExportStatus(ui('结束点必须晚于开始点至少 0.1 秒', 'The end must be at least 0.1 seconds after the start'))
       return
     }
 
     const support = await getDirectExportSupport(settings)
     setFastExportSupport(support)
     if (!support.supported) {
-      setExportStatus(support.reason ?? '当前浏览器不支持直接导出')
+      setExportStatus(support.reason
+        ? localizeErrorMessage(support.reason, language)
+        : ui('当前浏览器不支持直接导出', 'This browser does not support direct export'))
       return
     }
 
@@ -1097,7 +1160,10 @@ function App() {
     setExportProgress(0)
     setExportCurrentTime(rangeStart)
     setExportResult(null)
-    setExportStatus(`正在离屏编码 ${support.format ?? '视频'} ${formatTimePrecise(rangeStart)}–${formatTimePrecise(rangeEnd)}`)
+    setExportStatus(ui(
+      `正在离屏编码 ${support.format ?? '视频'} ${formatTimePrecise(rangeStart)}–${formatTimePrecise(rangeEnd)}`,
+      `Encoding ${support.format ?? 'video'} offscreen ${formatTimePrecise(rangeStart)}–${formatTimePrecise(rangeEnd)}`,
+    ))
 
     try {
       await document.fonts.ready
@@ -1122,7 +1188,10 @@ function App() {
           setExportCurrentTime(time)
         },
       })
-      setExportStatus(`${result.mimeType === 'video/mp4' ? 'MP4' : 'WebM'} 已直接生成`)
+      setExportStatus(ui(
+        `${result.mimeType === 'video/mp4' ? 'MP4' : 'WebM'} 已直接生成`,
+        `${result.mimeType === 'video/mp4' ? 'MP4' : 'WebM'} generated successfully`,
+      ))
 
       if (resultUrlRef.current) {
         URL.revokeObjectURL(resultUrlRef.current)
@@ -1131,7 +1200,9 @@ function App() {
       resultUrlRef.current = result.url
       setExportResult(result)
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : '导出失败')
+      setExportStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('导出失败', 'Export failed'))
     } finally {
       setIsExporting(false)
       renderFrame(currentTimeRef.current)
@@ -1144,7 +1215,7 @@ function App() {
     }
 
     if (parsedLrc.lines.length === 0) {
-      setExportStatus('请先导入带时间轴的歌词')
+      setExportStatus(ui('请先导入带时间轴的歌词', 'Import timed lyrics first'))
       return
     }
 
@@ -1156,7 +1227,7 @@ function App() {
       : audioDuration
 
     if (rangeEnd - rangeStart < minimumExportDuration) {
-      setExportStatus('结束点必须晚于开始点至少 0.1 秒')
+      setExportStatus(ui('结束点必须晚于开始点至少 0.1 秒', 'The end must be at least 0.1 seconds after the start'))
       return
     }
 
@@ -1164,7 +1235,7 @@ function App() {
     setIsExporting(true)
     setExportProgress(0)
     setExportCurrentTime(rangeStart)
-    setExportStatus('正在生成逐词 PNG 序列…')
+    setExportStatus(ui('正在生成逐词 PNG 序列…', 'Generating word-by-word PNG sequence…'))
 
     try {
       await document.fonts.ready
@@ -1184,7 +1255,10 @@ function App() {
         onProgress: (progress, time, frameCount) => {
           setExportProgress(progress)
           setExportCurrentTime(time)
-          setExportStatus(`正在生成逐词 PNG ${Math.round(progress * 100)}%（${frameCount} 张）`)
+          setExportStatus(ui(
+            `正在生成逐词 PNG ${Math.round(progress * 100)}%（${frameCount} 张）`,
+            `Generating word PNGs ${Math.round(progress * 100)}% (${frameCount} frames)`,
+          ))
         },
       })
 
@@ -1194,9 +1268,14 @@ function App() {
 
       frameSequenceUrlRef.current = result.url
       setFrameSequenceResult(result)
-      setExportStatus(`已生成 ${result.frameCount} 张 PNG，并打包为 ZIP`)
+      setExportStatus(ui(
+        `已生成 ${result.frameCount} 张 PNG，并打包为 ZIP`,
+        `Generated ${result.frameCount} PNG files and packaged them as a ZIP`,
+      ))
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : '逐词 PNG 导出失败')
+      setExportStatus(error instanceof Error
+        ? localizeErrorMessage(error.message, language)
+        : ui('逐词 PNG 导出失败', 'Word-by-word PNG export failed'))
     } finally {
       setIsExporting(false)
       renderFrame(currentTimeRef.current)
@@ -1222,13 +1301,13 @@ function App() {
   }, [audioDuration, exportEndTime, exportRangeMode, exportStartTime, parsedLrc.lines, settings.visualStyle])
   const previewTime = isExporting ? exportCurrentTime : currentTimeRef.current
   const exportBadge = fastExportSupport === null
-    ? '检测中'
+    ? ui('检测中', 'Checking')
     : fastExportSupport.supported
       ? `DIRECT ${fastExportSupport.format ?? 'VIDEO'}`
-      : '不可用'
+      : ui('不可用', 'Unavailable')
   const exportButtonLabel = isExporting
-    ? `正在导出 ${Math.round(exportProgress * 100)}%`
-    : exportRangeMode === 'selection' ? '直接导出选定片段' : '直接导出完整视频'
+    ? ui(`正在导出 ${Math.round(exportProgress * 100)}%`, `Exporting ${Math.round(exportProgress * 100)}%`)
+    : exportRangeMode === 'selection' ? ui('直接导出选定片段', 'Export selected range') : ui('直接导出完整视频', 'Export full video')
   const canvasStyle = {
     '--canvas-ratio': String(settings.width / settings.height),
     ...(previewCanvasSize.width > 0 && previewCanvasSize.height > 0
@@ -1258,15 +1337,19 @@ function App() {
       <header className="appHeader">
         <div className="appIdentity" aria-label="LRC Visual Studio">LRC Visual Studio</div>
         <span className="headerDivider" aria-hidden="true" />
-        <span className="projectName" title={title || '未命名项目'}>{title || '未命名项目'}</span>
+        <span className="projectName" title={title || ui('未命名项目', 'Untitled project')}>{title || ui('未命名项目', 'Untitled project')}</span>
         <div className="headerActions">
+          <div className="languageSwitch" role="group" aria-label={ui('界面语言', 'Interface language')}>
+            <button type="button" className={language === 'zh' ? 'active' : ''} aria-pressed={language === 'zh'} onClick={() => setLanguage('zh')}>中文</button>
+            <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
+          </div>
           <span className="autosaveStatus">{saveStatus}</span>
           <button
             className="previewHeaderButton"
             type="button"
             onClick={() => void togglePreviewFullscreen()}
           >
-            预览
+            {ui('预览', 'Preview')}
           </button>
           <button
             className="headerExportButton"
@@ -1274,26 +1357,26 @@ function App() {
             disabled={isExporting || fastExportSupport === null || !fastExportSupport.supported || !hasValidSelection}
             onClick={() => void startExport()}
           >
-            {isExporting ? `导出 ${Math.round(exportProgress * 100)}%` : '导出视频'}
+            {isExporting ? ui(`导出 ${Math.round(exportProgress * 100)}%`, `Exporting ${Math.round(exportProgress * 100)}%`) : ui('导出视频', 'Export video')}
           </button>
         </div>
       </header>
 
       <section className="editorGrid">
-        <aside className="projectSidebar" aria-label="项目素材">
+        <aside className="projectSidebar" aria-label={ui('项目素材', 'Project assets')}>
           <section className="sidebarSection projectSection" inert={isExporting}>
             <div className="sidebarTitleRow">
-              <h2>项目</h2>
-              <span>素材与内容</span>
+              <h2>{ui('项目', 'Project')}</h2>
+              <span>{ui('素材与内容', 'Assets & content')}</span>
             </div>
 
             <label className={audioFileName ? 'compactFileRow isReady' : 'compactFileRow'}>
               <span className="assetState" aria-hidden="true">{audioFileName ? '✓' : '♪'}</span>
               <span className="assetCopy">
-                <strong>音频</strong>
-                <small>{audioFileName || '导入音频文件'}</small>
+                <strong>{ui('音频', 'Audio')}</strong>
+                <small>{audioFileName || ui('导入音频文件', 'Import an audio file')}</small>
               </span>
-              <span className="assetAction">{audioFileName ? '替换' : '添加'}</span>
+              <span className="assetAction">{audioFileName ? ui('替换', 'Replace') : ui('添加', 'Add')}</span>
               <input type="file" accept="audio/*" onChange={(event) => handleAudioFile(event.target.files?.[0])} />
             </label>
 
@@ -1301,74 +1384,74 @@ function App() {
               <label className={lrcFileName ? 'compactFileRow isReady' : 'compactFileRow'}>
                 <span className="assetState assetStateLrc" aria-hidden="true">{lrcFileName ? '✓' : 'LRC'}</span>
                 <span className="assetCopy">
-                  <strong>带时间 LRC</strong>
-                  <small>{lrcFileName || '直接导入已有时间轴'}</small>
+                  <strong>{ui('带时间 LRC', 'Timed LRC')}</strong>
+                  <small>{lrcFileName || ui('直接导入已有时间轴', 'Import an existing timeline')}</small>
                 </span>
-                <span className="assetAction">{lrcFileName ? '替换' : '导入'}</span>
+                <span className="assetAction">{lrcFileName ? ui('替换', 'Replace') : ui('导入', 'Import')}</span>
                 <input type="file" accept=".lrc" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
               </label>
 
               <label className="compactFileRow compactFileRowSecondary">
                 <span className="assetState assetStateTxt" aria-hidden="true">TXT</span>
                 <span className="assetCopy">
-                  <strong>纯 TXT → 打轴器</strong>
-                  <small>逐句标记句首与独立句尾</small>
+                  <strong>{ui('纯 TXT → 打轴器', 'Plain TXT → timing editor')}</strong>
+                  <small>{ui('逐句标记句首与独立句尾', 'Mark each line start and optional end')}</small>
                 </span>
-                <span className="assetAction">打轴</span>
+                <span className="assetAction">{ui('打轴', 'Time')}</span>
                 <input type="file" accept=".txt,text/plain" onChange={(event) => void handleTxtFile(event.target.files?.[0])} />
               </label>
 
               <button className="pasteLyricsTrigger" type="button" disabled={isExporting} onClick={openPasteLyricsDialog}>
                 <span aria-hidden="true">＋</span>
-                <span><strong>直接粘贴歌词</strong><small>无需保存 TXT，按换行自动拆句</small></span>
-                <span aria-hidden="true">粘贴</span>
+                <span><strong>{ui('直接粘贴歌词', 'Paste lyrics')}</strong><small>{ui('无需保存 TXT，按换行自动拆句', 'Split into lines without saving a TXT file')}</small></span>
+                <span aria-hidden="true">{ui('粘贴', 'Paste')}</span>
               </button>
 
               <div className="lyricToolActions">
-                <button type="button" disabled={parsedLrc.lines.length === 0 || isExporting} onClick={openCurrentLyricsInTimingEditor}>打开打轴器</button>
+                <button type="button" disabled={parsedLrc.lines.length === 0 || isExporting} onClick={openCurrentLyricsInTimingEditor}>{ui('打开打轴器', 'Open timing editor')}</button>
                 <button type="button" disabled={!audioFileName || parsedLrc.lines.length === 0 || isAligningLyrics || isExporting} onClick={() => void alignCurrentLyricsLocally()}>
-                  {isAligningLyrics ? '对齐中…' : '本地逐词对齐'}
+                  {isAligningLyrics ? ui('对齐中…', 'Aligning…') : ui('本地逐词对齐', 'Local word alignment')}
                 </button>
               </div>
             </div>
 
             <label className={coverUrl ? 'compactFileRow isReady' : 'compactFileRow'}>
-              {coverUrl ? <img src={coverUrl} alt="当前专辑封面" className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">▣</span>}
+              {coverUrl ? <img src={coverUrl} alt={ui('当前专辑封面', 'Current album cover')} className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">▣</span>}
               <span className="assetCopy">
-                <strong>专辑封面</strong>
-                <small>{coverName || '可从 MP3 读取或手动添加'}</small>
+                <strong>{ui('专辑封面', 'Album cover')}</strong>
+                <small>{coverName || ui('可从 MP3 读取或手动添加', 'Read from MP3 metadata or add manually')}</small>
               </span>
-              <span className="assetAction">{coverUrl ? '替换' : '添加'}</span>
+              <span className="assetAction">{coverUrl ? ui('替换', 'Replace') : ui('添加', 'Add')}</span>
               <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => handleCoverFile(event.target.files?.[0])} />
             </label>
 
             <label className={backgroundImageUrl ? 'compactFileRow isReady' : 'compactFileRow'}>
-              {backgroundImageUrl ? <img src={backgroundImageUrl} alt="当前自定义背景" className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">▧</span>}
+              {backgroundImageUrl ? <img src={backgroundImageUrl} alt={ui('当前自定义背景', 'Current custom background')} className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">▧</span>}
               <span className="assetCopy">
-                <strong>画面背景</strong>
-                <small>{backgroundImageName || '上传图片，自动适配当前画幅'}</small>
+                <strong>{ui('画面背景', 'Canvas background')}</strong>
+                <small>{backgroundImageName || ui('上传图片，自动适配当前画幅', 'Upload an image and fit it to the canvas')}</small>
               </span>
-              <span className="assetAction">{backgroundImageUrl ? '替换' : '添加'}</span>
+              <span className="assetAction">{backgroundImageUrl ? ui('替换', 'Replace') : ui('添加', 'Add')}</span>
               <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => handleBackgroundImageFile(event.target.files?.[0])} />
             </label>
 
-            <div className="sidebarSubheading">歌曲信息</div>
+            <div className="sidebarSubheading">{ui('歌曲信息', 'Song details')}</div>
             <label className={activeTextElement === 'title' ? 'compactTextField active' : 'compactTextField'}>
-              <span>歌名</span>
+              <span>{ui('歌名', 'Song title')}</span>
               <input
                 type="text"
                 value={songTitle}
-                placeholder={stripExtension(lrcFileName || audioFileName) || '输入歌名'}
+                placeholder={stripExtension(lrcFileName || audioFileName) || ui('输入歌名', 'Enter song title')}
                 onFocus={() => setActiveTextElement('title')}
                 onChange={(event) => setSongTitle(event.target.value)}
               />
             </label>
             <label className={activeTextElement === 'artist' ? 'compactTextField active' : 'compactTextField'}>
-              <span>歌手</span>
+              <span>{ui('歌手', 'Artist')}</span>
               <input
                 type="text"
                 value={songArtist}
-                placeholder="输入歌手名"
+                placeholder={ui('输入歌手名', 'Enter artist name')}
                 onFocus={() => setActiveTextElement('artist')}
                 onChange={(event) => setSongArtist(event.target.value)}
               />
@@ -1381,25 +1464,25 @@ function App() {
               onClick={() => setIsPromoExpanded((expanded) => !expanded)}
             >
               <span aria-hidden="true">{isPromoExpanded ? '⌄' : '›'}</span>
-              宣传文案与歌单入口
+              {ui('宣传文案与歌单入口', 'Banner copy & playlist link')}
             </button>
             {isPromoExpanded && (
               <div className="promoFields">
                 <label className={activeTextElement === 'brand' ? 'compactTextField active' : 'compactTextField'}>
-                  <span>顶部宣传栏</span>
+                  <span>{ui('顶部宣传栏', 'Top banner')}</span>
                   <input type="text" value={sodaBrandText} onFocus={() => setActiveTextElement('brand')} onChange={(event) => setSodaBrandText(event.target.value)} />
                 </label>
                 <label className={activeTextElement === 'playlist' ? 'compactTextField active' : 'compactTextField'}>
-                  <span>歌单入口</span>
+                  <span>{ui('歌单入口', 'Playlist link')}</span>
                   <input type="text" value={sodaPlaylistText} onFocus={() => setActiveTextElement('playlist')} onChange={(event) => setSodaPlaylistText(event.target.value)} />
                 </label>
                 <label className={brandIconUrl ? 'compactFileRow isReady compactBrandIconRow' : 'compactFileRow compactBrandIconRow'}>
-                  {brandIconUrl ? <img src={brandIconUrl} alt="当前顶部图标" className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">♪</span>}
+                  {brandIconUrl ? <img src={brandIconUrl} alt={ui('当前顶部图标', 'Current top icon')} className="coverInputPreview" /> : <span className="assetState" aria-hidden="true">♪</span>}
                   <span className="assetCopy">
-                    <strong>顶部图标</strong>
-                    <small>{brandIconName || '默认音乐图标，可上传替换'}</small>
+                    <strong>{ui('顶部图标', 'Top icon')}</strong>
+                    <small>{brandIconName || ui('默认音乐图标，可上传替换', 'Default music icon; upload to replace')}</small>
                   </span>
-                  <span className="assetAction">{brandIconUrl ? '替换' : '添加'}</span>
+                  <span className="assetAction">{brandIconUrl ? ui('替换', 'Replace') : ui('添加', 'Add')}</span>
                   <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => handleBrandIconFile(event.target.files?.[0])} />
                 </label>
               </div>
@@ -1410,15 +1493,15 @@ function App() {
       <section className="workspace">
         <section className="previewPanel">
           <div className="previewToolbar">
-            <span className="previewLabel">适应窗口</span>
+            <span className="previewLabel">{ui('适应窗口', 'Fit to window')}</span>
             <span className="previewScale">{Math.round(getPreviewRenderScale(settings) * 100)}%</span>
             <span className="formatBadge">{formatAspectRatio(settings.width, settings.height)}</span>
             <button
               className="previewFullscreenButton toolbarFullscreenButton"
               type="button"
               onClick={() => void togglePreviewFullscreen()}
-              aria-label={isPreviewFullscreen ? '退出全屏预览' : '全屏预览'}
-              title={isPreviewFullscreen ? '退出全屏预览' : '全屏预览'}
+              aria-label={isPreviewFullscreen ? ui('退出全屏预览', 'Exit full-screen preview') : ui('全屏预览', 'Full-screen preview')}
+              title={isPreviewFullscreen ? ui('退出全屏预览', 'Exit full-screen preview') : ui('全屏预览', 'Full-screen preview')}
             >
               <span aria-hidden="true">⤢</span>
             </button>
@@ -1428,28 +1511,28 @@ function App() {
               ref={canvasRef}
               style={canvasStyle}
               data-orientation={settings.height > settings.width ? 'portrait' : settings.width > settings.height ? 'landscape' : 'square'}
-              aria-label={`${formatAspectRatio(settings.width, settings.height)} 歌词可视化预览`}
+              aria-label={ui(`${formatAspectRatio(settings.width, settings.height)} 歌词可视化预览`, `${formatAspectRatio(settings.width, settings.height)} lyric visualizer preview`)}
             />
-            {isExporting && <span className="recordingBadge">EXPORT · 正在离屏逐帧编码</span>}
+            {isExporting && <span className="recordingBadge">{ui('EXPORT · 正在离屏逐帧编码', 'EXPORT · Encoding frames offscreen')}</span>}
           </div>
           <div className="transport">
             <div className="transportControls">
-              <button className="jumpButton" type="button" onClick={() => seekBy(-5)} disabled={isExporting} title="后退 5 秒">
+              <button className="jumpButton" type="button" onClick={() => seekBy(-5)} disabled={isExporting} title={ui('后退 5 秒', 'Back 5 seconds')}>
                 <span aria-hidden="true">−5</span>
-                <span className="srOnly">后退 5 秒</span>
+                <span className="srOnly">{ui('后退 5 秒', 'Back 5 seconds')}</span>
               </button>
-              <button className="playButton" type="button" onClick={togglePlayback} disabled={!audioUrl || isExporting} title={isPlaying ? '暂停' : '播放'}>
+              <button className="playButton" type="button" onClick={togglePlayback} disabled={!audioUrl || isExporting} title={isPlaying ? ui('暂停', 'Pause') : ui('播放', 'Play')}>
                 <span aria-hidden="true">{isPlaying ? 'Ⅱ' : '▶'}</span>
-                <span className="srOnly">{isPlaying ? '暂停' : '播放'}</span>
+                <span className="srOnly">{isPlaying ? ui('暂停', 'Pause') : ui('播放', 'Play')}</span>
               </button>
-              <button className="jumpButton" type="button" onClick={() => seekBy(5)} disabled={isExporting} title="快进 5 秒">
+              <button className="jumpButton" type="button" onClick={() => seekBy(5)} disabled={isExporting} title={ui('快进 5 秒', 'Forward 5 seconds')}>
                 <span aria-hidden="true">+5</span>
-                <span className="srOnly">快进 5 秒</span>
+                <span className="srOnly">{ui('快进 5 秒', 'Forward 5 seconds')}</span>
               </button>
             </div>
             <div className="transportTimeline">
               <div className="transportMeta">
-                <strong>{title || '未命名作品'}</strong>
+                <strong>{title || ui('未命名作品', 'Untitled')}</strong>
                 <span className="timeReadout">
                   <span ref={currentTimeValueRef} className="currentTimeValue">{formatTime(previewTime)}</span>{' '}
                   <span>/</span> {formatTime(audioDuration)}
@@ -1464,7 +1547,7 @@ function App() {
                 step={0.01}
                 defaultValue={0}
                 disabled={isExporting}
-                aria-label="预览播放进度"
+                aria-label={ui('预览播放进度', 'Preview playback position')}
                 onPointerDown={(event) => {
                   event.currentTarget.setPointerCapture(event.pointerId)
                   beginScrub()
@@ -1486,7 +1569,7 @@ function App() {
 
         <div className="hintBar">
           <span className="hintIcon" aria-hidden="true">i</span>
-          <p>实时预览使用性能分辨率保证滚动流畅；导出仍按所选画幅的完整分辨率逐帧生成。</p>
+          <p>{ui('实时预览使用性能分辨率保证滚动流畅；导出仍按所选画幅的完整分辨率逐帧生成。', 'The live preview uses a performance resolution for smooth playback; export still renders every frame at the selected full resolution.')}</p>
         </div>
 
         <audio
@@ -1512,28 +1595,28 @@ function App() {
       <aside className={`${isExporting ? 'controlPanel isExporting' : 'controlPanel'} active-${activeStyleTab}`} aria-busy={isExporting}>
         <div className="panelHeading">
           <div>
-            <p>编辑器</p>
-            <strong>画面设置</strong>
+            <p>{ui('编辑器', 'Editor')}</p>
+            <strong>{ui('画面设置', 'Visual settings')}</strong>
           </div>
           <div className="panelHeadingActions">
-            <span className="autosaveStatus">实时预览</span>
+            <span className="autosaveStatus">{ui('实时预览', 'Live preview')}</span>
             <button
               className="headerExportButton"
               type="button"
               disabled={isExporting || fastExportSupport === null || !fastExportSupport.supported || !hasValidSelection}
               onClick={() => void startExport()}
             >
-              导出视频
+              {ui('导出视频', 'Export video')}
             </button>
-            <span className="readyMark" title="实时预览已连接" aria-label="实时预览已连接" />
+            <span className="readyMark" title={ui('实时预览已连接', 'Live preview connected')} aria-label={ui('实时预览已连接', 'Live preview connected')} />
           </div>
         </div>
 
-        <div className="styleTabs" role="tablist" aria-label="样式设置分组">
+        <div className="styleTabs" role="tablist" aria-label={ui('样式设置分组', 'Settings sections')}>
           {([
-            ['scene', '画面与背景'],
-            ['lyrics', '歌词与文字'],
-            ['typeMotion', '字体与动效'],
+            ['scene', ui('画面与背景', 'Canvas & background')],
+            ['lyrics', ui('歌词与文字', 'Lyrics & text')],
+            ['typeMotion', ui('字体与动效', 'Fonts & motion')],
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -1549,12 +1632,12 @@ function App() {
         </div>
 
         <section className="panelGroup projectAssetPanel" inert={isExporting}>
-          <h2>项目素材</h2>
+          <h2>{ui('项目素材', 'Project assets')}</h2>
           <label className="fileInput">
             <span className="fileIcon" aria-hidden="true">♪</span>
             <span className="fileCopy">
-              <strong>导入音频文件</strong>
-              <small>{audioFileName || '支持 MP3 / WAV / M4A 等格式'}</small>
+              <strong>{ui('导入音频文件', 'Import audio')}</strong>
+              <small>{audioFileName || ui('支持 MP3 / WAV / M4A 等格式', 'Supports MP3, WAV, M4A, and more')}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input type="file" accept="audio/*" onChange={(event) => handleAudioFile(event.target.files?.[0])} />
@@ -1563,8 +1646,8 @@ function App() {
           <label className="fileInput">
             <span className="fileIcon fileIconText" aria-hidden="true">LRC</span>
             <span className="fileCopy">
-              <strong>导入 LRC 歌词</strong>
-              <small>{lrcFileName ? `${lrcFileName}${lrcEncoding ? ` · ${lrcEncoding}` : ''}` : '自动识别 UTF-8、GBK、Big5 与 UTF-16'}</small>
+              <strong>{ui('导入 LRC 歌词', 'Import LRC lyrics')}</strong>
+              <small>{lrcFileName ? `${lrcFileName}${lrcEncoding ? ` · ${lrcEncoding}` : ''}` : ui('自动识别 UTF-8、GBK、Big5 与 UTF-16', 'Detects UTF-8, GBK, Big5, and UTF-16 automatically')}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input type="file" accept=".lrc" onChange={(event) => void handleLrcFile(event.target.files?.[0])} />
@@ -1573,8 +1656,8 @@ function App() {
           <label className="fileInput">
             <span className="fileIcon fileIconText" aria-hidden="true">TXT</span>
             <span className="fileCopy">
-              <strong>导入纯 TXT 并打轴</strong>
-              <small>在内置打轴器中分别设置句首和句尾</small>
+              <strong>{ui('导入纯 TXT 并打轴', 'Import plain TXT and add timing')}</strong>
+              <small>{ui('在内置打轴器中分别设置句首和句尾', 'Set line starts and ends in the built-in timing editor')}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input type="file" accept=".txt,text/plain" onChange={(event) => void handleTxtFile(event.target.files?.[0])} />
@@ -1582,35 +1665,35 @@ function App() {
 
           <button className="pasteLyricsTrigger pasteLyricsTriggerWide" type="button" disabled={isExporting} onClick={openPasteLyricsDialog}>
             <span aria-hidden="true">＋</span>
-            <span><strong>直接粘贴歌词</strong><small>把多行歌词粘贴进文本框后直接开始打轴</small></span>
-            <span aria-hidden="true">粘贴</span>
+            <span><strong>{ui('直接粘贴歌词', 'Paste lyrics')}</strong><small>{ui('把多行歌词粘贴进文本框后直接开始打轴', 'Paste multiple lines and start timing immediately')}</small></span>
+            <span aria-hidden="true">{ui('粘贴', 'Paste')}</span>
           </button>
 
           <div className="metadataEditor">
             <label className="field">
-              <span>歌名（画面左上角）</span>
+              <span>{ui('歌名（画面左上角）', 'Song title (top left)')}</span>
               <input
                 type="text"
                 value={songTitle}
-                placeholder={stripExtension(lrcFileName || audioFileName) || '输入歌名'}
+                placeholder={stripExtension(lrcFileName || audioFileName) || ui('输入歌名', 'Enter song title')}
                 onChange={(event) => setSongTitle(event.target.value)}
               />
             </label>
             <label className="field">
-              <span>歌手</span>
+              <span>{ui('歌手', 'Artist')}</span>
               <input
                 type="text"
                 value={songArtist}
-                placeholder="输入歌手名"
+                placeholder={ui('输入歌手名', 'Enter artist name')}
                 onChange={(event) => setSongArtist(event.target.value)}
               />
             </label>
           </div>
 
           <div className="sodaPromoEditor">
-            <p>汽水音乐样式文案</p>
+            <p>{ui('汽水音乐样式文案', 'Soda Music copy')}</p>
             <label className="field">
-              <span>顶部宣传栏</span>
+              <span>{ui('顶部宣传栏', 'Top banner')}</span>
               <input
                 type="text"
                 value={sodaBrandText}
@@ -1618,7 +1701,7 @@ function App() {
               />
             </label>
             <label className="field">
-              <span>歌单入口</span>
+              <span>{ui('歌单入口', 'Playlist link')}</span>
               <input
                 type="text"
                 value={sodaPlaylistText}
@@ -1629,13 +1712,13 @@ function App() {
 
           <label className="fileInput coverInput">
             {coverUrl ? (
-              <img src={coverUrl} alt="当前专辑封面" className="coverInputPreview" />
+              <img src={coverUrl} alt={ui('当前专辑封面', 'Current album cover')} className="coverInputPreview" />
             ) : (
               <span className="fileIcon coverIcon" aria-hidden="true">▣</span>
             )}
             <span className="fileCopy">
-              <strong>专辑封面</strong>
-              <small>{coverName || '导入 MP3 时自动读取内嵌封面，也可手动上传'}</small>
+              <strong>{ui('专辑封面', 'Album cover')}</strong>
+              <small>{coverName || ui('导入 MP3 时自动读取内嵌封面，也可手动上传', 'Read embedded MP3 artwork automatically or upload manually')}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" onChange={(event) => handleCoverFile(event.target.files?.[0])} />
@@ -1643,19 +1726,19 @@ function App() {
         </section>
 
         <section className="panelGroup fontPanel" inert={isExporting}>
-          <h2>字体</h2>
+          <h2>{ui('字体', 'Fonts')}</h2>
           <label className="fileInput">
             <span className="fileIcon typeIcon" aria-hidden="true">T</span>
             <span className="fileCopy">
-              <strong>导入字体</strong>
-              <small>{fontStatus === '未导入字体' ? '支持 TTF / OTF / WOFF / WOFF2' : fontStatus}</small>
+              <strong>{ui('导入字体', 'Import font')}</strong>
+              <small>{fontStatus === '未导入字体' || fontStatus === 'No font imported' ? ui('支持 TTF / OTF / WOFF / WOFF2', 'Supports TTF, OTF, WOFF, and WOFF2') : fontStatus}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" onChange={(event) => void handleFontFile(event.target.files?.[0])} />
           </label>
 
           <label className="field">
-            <span>中文字体</span>
+            <span>{ui('中文字体', 'Chinese font')}</span>
             <select value={settings.chineseFont} onChange={(event) => updateSetting('chineseFont', event.target.value)}>
               {fontOptions.map((font) => (
                 <option key={`zh-${font.value}`} value={font.value}>{font.label}</option>
@@ -1664,7 +1747,7 @@ function App() {
           </label>
 
           <label className="field">
-            <span>英文字体</span>
+            <span>{ui('英文字体', 'Latin font')}</span>
             <select value={settings.englishFont} onChange={(event) => updateSetting('englishFont', event.target.value)}>
               {fontOptions.map((font) => (
                 <option key={`en-${font.value}`} value={font.value}>{font.label}</option>
@@ -1675,17 +1758,17 @@ function App() {
 
         <section className="panelGroup typographyGroup lyricsPanel" inert={isExporting}>
           <div className="sectionTitleRow">
-            <h2>{activeTextElementLabel}设置</h2>
-            <span>已选中</span>
+            <h2>{ui(`${activeTextElementLabel}设置`, `${activeTextElementLabel} settings`)}</h2>
+            <span>{ui('已选中', 'Selected')}</span>
           </div>
-          <div className="elementPicker" role="listbox" aria-label="正在编辑的文字元素">
+          <div className="elementPicker" role="listbox" aria-label={ui('正在编辑的文字元素', 'Text element being edited')}>
             {([
-              ['currentLyric', '当前歌词'],
-              ['normalLyric', '普通歌词'],
-              ['title', '歌名'],
-              ['artist', '歌手'],
-              ['brand', '宣传栏'],
-              ['playlist', '歌单入口'],
+              ['currentLyric', ui('当前歌词', 'Current lyric')],
+              ['normalLyric', ui('普通歌词', 'Inactive lyrics')],
+              ['title', ui('歌名', 'Song title')],
+              ['artist', ui('歌手', 'Artist')],
+              ['brand', ui('宣传栏', 'Banner')],
+              ['playlist', ui('歌单入口', 'Playlist link')],
             ] as const).map(([element, label]) => (
               <button
                 key={element}
@@ -1700,7 +1783,7 @@ function App() {
             ))}
           </div>
           <RangeField
-            label="字号"
+            label={ui('字号', 'Font size')}
             value={activeTextSize}
             min={getTextElementRange(activeTextElement).min}
             max={getTextElementRange(activeTextElement).max}
@@ -1708,57 +1791,57 @@ function App() {
             onChange={updateActiveTextSize}
           />
           <ColorField
-            label={activeTextElement === 'currentLyric' ? '基础颜色' : activeTextElement === 'normalLyric' ? '普通歌词颜色' : '文字颜色'}
+            label={activeTextElement === 'currentLyric' ? ui('基础颜色', 'Base color') : activeTextElement === 'normalLyric' ? ui('普通歌词颜色', 'Inactive lyric color') : ui('文字颜色', 'Text color')}
             value={activeTextColor}
             onChange={updateActiveTextColor}
           />
           {settings.visualStyle === 'tiktok' && activeTextElement === 'currentLyric' && (
             <>
               <RangeField
-                label="文字柔化"
+                label={ui('文字柔化', 'Text softness')}
                 value={settings.tiktokTextBlur}
                 min={0}
                 max={6}
                 unit="px"
                 onChange={(value) => updateSetting('tiktokTextBlur', value)}
               />
-              <p className="singleLyricNote">0 px 为清晰边缘；约 2 px 接近参考图中轻微发虚的文字质感。</p>
+              <p className="singleLyricNote">{ui('0 px 为清晰边缘；约 2 px 接近参考图中轻微发虚的文字质感。', '0 px keeps crisp edges; around 2 px produces the slightly softened texture of the reference.')}</p>
             </>
           )}
           {(activeTextElement === 'currentLyric' || activeTextElement === 'normalLyric') && (
             settings.visualStyle === 'tiktok' ? (
-              <p className="singleLyricNote">参考模板固定使用左侧 24% 锚点、47% 排版宽度和自动两端分布；字号与字体仍可在这里调整。</p>
+              <p className="singleLyricNote">{ui('参考模板固定使用左侧 24% 锚点、47% 排版宽度和自动两端分布；字号与字体仍可在这里调整。', 'The reference layout uses a fixed 24% left anchor, 47% text width, and automatic justified distribution; font and size remain adjustable here.')}</p>
             ) : <>
               <label className="field">
-                <span>歌词对齐</span>
+                <span>{ui('歌词对齐', 'Lyric alignment')}</span>
                 <select
                   value={settings.lyricAlignment}
                   onChange={(event) => updateSetting('lyricAlignment', event.target.value as VisualizerSettings['lyricAlignment'])}
                 >
-                  <option value="center">居中</option>
-                  <option value="left">向左对齐</option>
+                  <option value="center">{ui('居中', 'Centered')}</option>
+                  <option value="left">{ui('向左对齐', 'Left aligned')}</option>
                 </select>
               </label>
-              <RangeField label="行距" value={settings.lineGap} min={64} max={180} unit="px" onChange={(value) => updateSetting('lineGap', value)} />
+              <RangeField label={ui('行距', 'Line spacing')} value={settings.lineGap} min={64} max={180} unit="px" onChange={(value) => updateSetting('lineGap', value)} />
             </>
           )}
         </section>
 
         <section className="panelGroup paletteGroup backgroundPanel" inert={isExporting}>
           <div className="sectionTitleRow">
-            <h2>智能配色</h2>
+            <h2>{ui('智能配色', 'Smart palette')}</h2>
             <span>LOCAL · OKLAB</span>
           </div>
 
           <label className="paletteUpload">
             {paletteImageUrl ? (
-              <img src={paletteImageUrl} alt="配色参考图预览" />
+              <img src={paletteImageUrl} alt={ui('配色参考图预览', 'Palette reference preview')} />
             ) : (
               <span className="paletteUploadIcon" aria-hidden="true">◌</span>
             )}
             <span className="paletteUploadCopy">
-              <strong>{paletteSourceName || '从图片提取色系'}</strong>
-              <small>图片只在浏览器本地分析，不会上传</small>
+              <strong>{paletteSourceName || ui('从图片提取色系', 'Extract palette from image')}</strong>
+              <small>{ui('图片只在浏览器本地分析，不会上传', 'Images are analyzed locally and never uploaded')}</small>
             </span>
             <span className="fileAdd" aria-hidden="true">＋</span>
             <input
@@ -1768,22 +1851,23 @@ function App() {
             />
           </label>
 
-          <div className="paletteSwatches" aria-label="当前提取色板">
+          <div className="paletteSwatches" aria-label={ui('当前提取色板', 'Extracted palette')}>
             {paletteSwatches.map((color, index) => (
               <span key={`${color}-${index}`} style={{ backgroundColor: color }} title={color} />
             ))}
           </div>
           <p className="paletteStatus">{paletteStatus}</p>
 
-          <div className="presetGrid" aria-label="颜色预设">
+          <div className="presetGrid" aria-label={ui('颜色预设', 'Color presets')}>
             {palettePresets.map((palette) => (
               <PalettePresetButton
                 key={palette.id}
                 palette={palette}
+                language={language}
                 active={activePaletteId === palette.id}
                 onClick={() => {
                   applyPalette(palette)
-                  setPaletteStatus(`已应用 ${palette.name} 预设`)
+                  setPaletteStatus(ui(`已应用 ${palette.name} 预设`, `Applied the ${palette.name} preset`))
                 }}
               />
             ))}
@@ -1791,9 +1875,9 @@ function App() {
         </section>
 
         <section className="panelGroup visualPanel" inert={isExporting}>
-          <h2>{activeStyleTab === 'scene' ? '画面' : activeStyleTab === 'lyrics' ? '歌词排版' : '动效'}</h2>
+          <h2>{activeStyleTab === 'scene' ? ui('画面', 'Canvas') : activeStyleTab === 'lyrics' ? ui('歌词排版', 'Lyric layout') : ui('动效', 'Motion')}</h2>
           <label className="field canvasControl">
-            <span>画幅</span>
+            <span>{ui('画幅', 'Canvas size')}</span>
             <select
               value={selectedSize}
               onChange={(event) => {
@@ -1810,29 +1894,29 @@ function App() {
           </label>
 
           <label className="field layoutControl">
-            <span>音乐画面样式</span>
+            <span>{ui('音乐画面样式', 'Visualizer style')}</span>
             <select
               value={settings.visualStyle}
               onChange={(event) => selectVisualStyle(event.target.value as VisualizerSettings['visualStyle'])}
             >
-              <option value="classic">普通滚动歌词</option>
-              <option value="soda">汽水音乐卡片（无短视频侧栏）</option>
-              <option value="single">单句整行波动歌词（淡入淡出）</option>
-              <option value="tiktok">TikTok 黑白逐词歌词（参考复刻）</option>
+              <option value="classic">{ui('普通滚动歌词', 'Classic scrolling lyrics')}</option>
+              <option value="soda">{ui('汽水音乐卡片（无短视频侧栏）', 'Soda Music card')}</option>
+              <option value="single">{ui('单句整行波动歌词（淡入淡出）', 'Fancy single-line wave')}</option>
+              <option value="tiktok">{ui('TikTok 黑白逐词歌词（参考复刻）', 'TikTok monochrome word reveal')}</option>
             </select>
           </label>
 
           {settings.visualStyle === 'tiktok' ? (
-            <p className="singleLyricNote">画面固定为 9:16 黑底，中间放置一个与画面同宽的白色正方形；上下黑边各占 21.875%，与参考视频的 720×1280 构图一致。</p>
+            <p className="singleLyricNote">{ui('画面固定为 9:16 黑底，中间放置一个与画面同宽的白色正方形；上下黑边各占 21.875%，与参考视频的 720×1280 构图一致。', 'Uses a fixed 9:16 black canvas with a full-width white square centered vertically, matching the 720×1280 reference composition.')}</p>
           ) : <div className="backgroundControls">
             <label className="paletteUpload backgroundImageUpload">
               {backgroundImageUrl ? (
-                <img src={backgroundImageUrl} alt="自定义画面背景预览" />
+                <img src={backgroundImageUrl} alt={ui('自定义画面背景预览', 'Custom background preview')} />
               ) : (
                 <span className="paletteUploadIcon" aria-hidden="true">▧</span>
               )}
               <span className="paletteUploadCopy">
-                <strong>{backgroundImageName || '上传自定义图片背景'}</strong>
+                <strong>{backgroundImageName || ui('上传自定义图片背景', 'Upload a custom background')}</strong>
                 <small>{backgroundFitDescription}</small>
               </span>
               <span className="fileAdd" aria-hidden="true">＋</span>
@@ -1845,7 +1929,7 @@ function App() {
 
             <div className="backgroundImageTuning">
               <RangeField
-                label="图片高斯模糊"
+                label={ui('图片高斯模糊', 'Background blur')}
                 value={settings.backgroundImageBlur}
                 min={0}
                 max={80}
@@ -1854,7 +1938,7 @@ function App() {
                 onChange={(value) => updateSetting('backgroundImageBlur', value)}
               />
               <RangeField
-                label="图片变暗遮罩"
+                label={ui('图片变暗遮罩', 'Dark overlay')}
                 value={settings.backgroundImageDarkness}
                 min={0}
                 max={90}
@@ -1866,35 +1950,35 @@ function App() {
 
             {backgroundImageUrl && (
               <button className="backgroundImageClear" type="button" onClick={clearBackgroundImage}>
-                移除自定义背景
+                {ui('移除自定义背景', 'Remove custom background')}
               </button>
             )}
 
             <div className="colorGrid">
-              <ColorField label="当前歌词" value={settings.lyricColor} onChange={(value) => updateSetting('lyricColor', value)} />
-              <ColorField label="高亮最终颜色" value={settings.progressColor} onChange={(value) => updateSetting('progressColor', value)} />
-              <ColorField label="其他歌词" value={settings.nextColor} onChange={(value) => updateSetting('nextColor', value)} />
-              <ColorField label="背景" value={settings.backgroundColor} onChange={(value) => updateSetting('backgroundColor', value)} disabled={settings.transparentBackground} />
+              <ColorField label={ui('当前歌词', 'Current lyric')} value={settings.lyricColor} onChange={(value) => updateSetting('lyricColor', value)} />
+              <ColorField label={ui('高亮最终颜色', 'Highlight color')} value={settings.progressColor} onChange={(value) => updateSetting('progressColor', value)} />
+              <ColorField label={ui('其他歌词', 'Other lyrics')} value={settings.nextColor} onChange={(value) => updateSetting('nextColor', value)} />
+              <ColorField label={ui('背景', 'Background')} value={settings.backgroundColor} onChange={(value) => updateSetting('backgroundColor', value)} disabled={settings.transparentBackground} />
             </div>
           </div>}
 
           <div className="lyricControls">
             {settings.visualStyle === 'single' ? (
-              <p className="singleLyricNote">每次只显示一句歌词：字形沿整行水波起伏并柔软回弹。可开启入场变速，让新歌词先从上方快速波动，再自然减速为慢波。</p>
+              <p className="singleLyricNote">{ui('每次只显示一句歌词：字形沿整行水波起伏并柔软回弹。可开启入场变速，让新歌词先从上方快速波动，再自然减速为慢波。', 'Shows one lyric at a time with soft, line-wide glyph waves. Optional speed ramp makes each new line wave quickly from above, then settle into a slow motion.')}</p>
             ) : settings.visualStyle === 'tiktok' ? (
-              <p className="singleLyricNote">每句歌词预先排版后按单词硬切显现，每屏最多三行，长句会自动切到下一组。增强 LRC 直接使用原逐词时间；普通 LRC 会在相邻两句之间自动分配时间。</p>
+              <p className="singleLyricNote">{ui('每句歌词预先排版后按单词硬切显现，每屏最多三行，长句会自动切到下一组。增强 LRC 直接使用原逐词时间；普通 LRC 会在相邻两句之间自动分配时间。', 'Pre-layouts each lyric and reveals it word by word, up to three lines per screen. Enhanced LRC uses its word timing; regular LRC distributes timing between adjacent lines.')}</p>
             ) : (
               <>
             <div className="field highlightControl highlightModeControl">
-              <span>当前歌词高亮</span>
-              <div className="highlightModeOptions" role="group" aria-label="当前歌词高亮方式">
+              <span>{ui('当前歌词高亮', 'Current lyric highlight')}</span>
+              <div className="highlightModeOptions" role="group" aria-label={ui('当前歌词高亮方式', 'Current lyric highlight mode')}>
                 <button
                   className={settings.lyricHighlightMode === 'animated' ? 'active' : ''}
                   type="button"
                   aria-pressed={settings.lyricHighlightMode === 'animated'}
                   onClick={() => updateSetting('lyricHighlightMode', 'animated')}
                 >
-                  <span>变色动画</span>
+                  <span>{ui('变色动画', 'Color sweep')}</span>
                   <span className="highlightModeIndicator" aria-hidden="true" />
                 </button>
                 <button
@@ -1903,7 +1987,7 @@ function App() {
                   aria-pressed={settings.lyricHighlightMode === 'instant'}
                   onClick={() => updateSetting('lyricHighlightMode', 'instant')}
                 >
-                  <span>直接显示</span>
+                  <span>{ui('直接显示', 'Instant')}</span>
                   <span className="highlightModeIndicator" aria-hidden="true" />
                 </button>
                 <button
@@ -1912,25 +1996,25 @@ function App() {
                   aria-pressed={settings.lyricHighlightMode === 'focus'}
                   onClick={() => updateSetting('lyricHighlightMode', 'focus')}
                 >
-                  <span>浮入聚焦</span>
+                  <span>{ui('浮入聚焦', 'Float into focus')}</span>
                   <span className="highlightModeIndicator" aria-hidden="true" />
                 </button>
               </div>
             </div>
 
             <label className="field">
-              <span>歌词对齐</span>
+              <span>{ui('歌词对齐', 'Lyric alignment')}</span>
               <select
                 value={settings.lyricAlignment}
                 onChange={(event) => updateSetting('lyricAlignment', event.target.value as VisualizerSettings['lyricAlignment'])}
               >
-                <option value="center">居中</option>
-                <option value="left">向左对齐</option>
+                <option value="center">{ui('居中', 'Centered')}</option>
+                <option value="left">{ui('向左对齐', 'Left aligned')}</option>
               </select>
             </label>
 
             <RangeField
-              label="歌词行距"
+              label={ui('歌词行距', 'Lyric line spacing')}
               value={settings.lineGap}
               min={64}
               max={180}
@@ -1939,11 +2023,11 @@ function App() {
             />
 
             <RangeField
-              label="显示歌词行数"
+              label={ui('显示歌词行数', 'Visible lyric lines')}
               value={settings.visibleLineCount}
               min={3}
               max={13}
-              unit="行"
+              unit={ui('行', 'lines')}
               onChange={(value) => updateSetting('visibleLineCount', value)}
             />
               </>
@@ -1953,31 +2037,31 @@ function App() {
           <div className="motionControls">
             <div className="toggleList">
               <ToggleField
-                label="透明背景"
+                label={ui('透明背景', 'Transparent background')}
                 checked={settings.transparentBackground}
                 disabled={settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('transparentBackground', checked)}
               />
               <ToggleField
-                label="显示歌曲信息"
+                label={ui('显示歌曲信息', 'Show song details')}
                 checked={settings.showMetadata}
                 disabled={settings.visualStyle === 'single' || settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showMetadata', checked)}
               />
               <ToggleField
-                label="显示底部线型进度条"
+                label={ui('显示底部线型进度条', 'Show bottom progress line')}
                 checked={settings.showProgressBar}
                 disabled={settings.visualStyle === 'single' || settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showProgressBar', checked)}
               />
               <ToggleField
-                label="歌词入场先快后慢"
+                label={ui('歌词入场先快后慢', 'Fast-to-slow lyric entrance')}
                 checked={settings.singleWaveSpeedRamp}
                 disabled={settings.visualStyle !== 'single'}
                 onChange={(checked) => updateSetting('singleWaveSpeedRamp', checked)}
               />
               <ToggleField
-                label="显示底部鼓点律动条"
+                label={ui('显示底部鼓点律动条', 'Show beat-reactive bar')}
                 checked={settings.showBeatBar}
                 disabled={settings.visualStyle === 'tiktok'}
                 onChange={(checked) => updateSetting('showBeatBar', checked)}
@@ -1989,10 +2073,10 @@ function App() {
 
         <section className="panelGroup exportGroup">
           <div className="sectionTitleRow">
-            <h2>导出</h2>
+            <h2>{ui('导出', 'Export')}</h2>
             <span>{exportBadge}</span>
           </div>
-          <div className="exportRangeMode" role="group" aria-label="导出范围">
+          <div className="exportRangeMode" role="group" aria-label={ui('导出范围', 'Export range')}>
             <button
               className={exportRangeMode === 'full' ? 'active' : ''}
               type="button"
@@ -2000,7 +2084,7 @@ function App() {
               aria-pressed={exportRangeMode === 'full'}
               onClick={() => setExportRangeMode('full')}
             >
-              完整音频
+              {ui('完整音频', 'Full audio')}
             </button>
             <button
               className={exportRangeMode === 'selection' ? 'active' : ''}
@@ -2009,19 +2093,19 @@ function App() {
               aria-pressed={exportRangeMode === 'selection'}
               onClick={() => setExportRangeMode('selection')}
             >
-              选定片段
+              {ui('选定片段', 'Selected range')}
             </button>
           </div>
           {exportRangeMode === 'selection' && (
             <div className={hasValidSelection ? 'clipEditor' : 'clipEditor invalid'}>
               <div className="clipSummary">
                 <span>{formatTimePrecise(exportStartTime)} – {formatTimePrecise(exportEndTime)}</span>
-                <strong>时长 {formatTimePrecise(selectedRangeDuration)}</strong>
+                <strong>{ui(`时长 ${formatTimePrecise(selectedRangeDuration)}`, `Duration ${formatTimePrecise(selectedRangeDuration)}`)}</strong>
               </div>
               <div className="clipRangeField">
                 <span className="clipRangeHeader">
-                  <span>开始点</span>
-                  <button type="button" disabled={isExporting} onClick={() => updateExportStartTime(currentTimeRef.current)}>使用当前位置</button>
+                  <span>{ui('开始点', 'Start')}</span>
+                  <button type="button" disabled={isExporting} onClick={() => updateExportStartTime(currentTimeRef.current)}>{ui('使用当前位置', 'Use playhead')}</button>
                 </span>
                 <input
                   type="range"
@@ -2030,14 +2114,14 @@ function App() {
                   step={0.1}
                   value={clampNumber(exportStartTime, 0, audioDuration)}
                   disabled={isExporting}
-                  aria-label="导出片段开始点"
+                  aria-label={ui('导出片段开始点', 'Export range start')}
                   onChange={(event) => updateExportStartTime(Number(event.target.value))}
                 />
               </div>
               <div className="clipRangeField">
                 <span className="clipRangeHeader">
-                  <span>结束点</span>
-                  <button type="button" disabled={isExporting} onClick={() => updateExportEndTime(currentTimeRef.current)}>使用当前位置</button>
+                  <span>{ui('结束点', 'End')}</span>
+                  <button type="button" disabled={isExporting} onClick={() => updateExportEndTime(currentTimeRef.current)}>{ui('使用当前位置', 'Use playhead')}</button>
                 </span>
                 <input
                   type="range"
@@ -2046,15 +2130,15 @@ function App() {
                   step={0.1}
                   value={clampNumber(exportEndTime, 0, audioDuration)}
                   disabled={isExporting}
-                  aria-label="导出片段结束点"
+                  aria-label={ui('导出片段结束点', 'Export range end')}
                   onChange={(event) => updateExportEndTime(Number(event.target.value))}
                 />
               </div>
               <div className="clipSeekActions">
-                <button type="button" disabled={isExporting} onClick={() => seekTo(exportStartTime)}>跳到开始</button>
-                <button type="button" disabled={isExporting} onClick={() => seekTo(exportEndTime)}>跳到结束</button>
+                <button type="button" disabled={isExporting} onClick={() => seekTo(exportStartTime)}>{ui('跳到开始', 'Go to start')}</button>
+                <button type="button" disabled={isExporting} onClick={() => seekTo(exportEndTime)}>{ui('跳到结束', 'Go to end')}</button>
               </div>
-              {!hasValidSelection && <p className="clipError">结束点必须晚于开始点至少 0.1 秒</p>}
+              {!hasValidSelection && <p className="clipError">{ui('结束点必须晚于开始点至少 0.1 秒', 'The end must be at least 0.1 seconds after the start')}</p>}
             </div>
           )}
           <button
@@ -2070,10 +2154,10 @@ function App() {
             <div className="tiktokFrameExport">
               <div className="tiktokFrameExportHeader">
                 <div>
-                  <strong>逐词 PNG 序列</strong>
-                  <p>片段起始状态与每次新增词都会生成一张完整图片，统一打包为 ZIP。</p>
+                  <strong>{ui('逐词 PNG 序列', 'Word-by-word PNG sequence')}</strong>
+                  <p>{ui('片段起始状态与每次新增词都会生成一张完整图片，统一打包为 ZIP。', 'Creates a full PNG for the initial state and every newly revealed word, then packages them as a ZIP.')}</p>
                 </div>
-                <span>{tiktokFrameCount} 张</span>
+                <span>{ui(`${tiktokFrameCount} 张`, `${tiktokFrameCount} frames`)}</span>
               </div>
               <button
                 className="tiktokFrameExportButton"
@@ -2082,19 +2166,19 @@ function App() {
                 disabled={isExporting || !hasValidSelection || tiktokFrameCount === 0}
               >
                 <span aria-hidden="true">▣</span>
-                {isExporting ? `正在生成 ${Math.round(exportProgress * 100)}%` : '导出逐词 PNG（ZIP）'}
+                {isExporting ? ui(`正在生成 ${Math.round(exportProgress * 100)}%`, `Generating ${Math.round(exportProgress * 100)}%`) : ui('导出逐词 PNG（ZIP）', 'Export word PNGs (ZIP)')}
               </button>
             </div>
           )}
-          <div className="meter" aria-label="导出进度">
+          <div className="meter" aria-label={ui('导出进度', 'Export progress')}>
             <span style={{ width: `${Math.round(exportProgress * 100)}%` }} />
           </div>
           <p className="statusLine">{exportStatus}</p>
           {settings.transparentBackground && (
-            <p className="statusLine">透明画布可预览；MP4 通常不保留 alpha，WebM/VP9 更适合透明素材。</p>
+            <p className="statusLine">{ui('透明画布可预览；MP4 通常不保留 alpha，WebM/VP9 更适合透明素材。', 'Transparent canvas is available in preview. MP4 usually does not retain alpha; WebM/VP9 is better for transparent assets.')}</p>
           )}
           {fastExportSupport?.supported && (
-            <p className="statusLine">画面与音频均直接编码，不使用 MediaRecorder 或预览录制；切换窗口不会影响成片。</p>
+            <p className="statusLine">{ui('画面与音频均直接编码，不使用 MediaRecorder 或预览录制；切换窗口不会影响成片。', 'Video and audio are encoded directly without MediaRecorder or preview capture, so switching windows does not affect the export.')}</p>
           )}
           {fastExportSupport && !fastExportSupport.supported && (
             <p className="statusLine">{fastExportSupport.reason}</p>
@@ -2102,13 +2186,13 @@ function App() {
           {exportResult && (
             <a className="downloadButton" href={exportResult.url} download={exportResult.filename}>
               <span aria-hidden="true">↓</span>
-              下载 {exportResult.filename.endsWith('.mp4') ? 'MP4' : 'WebM'}
+              {ui('下载', 'Download')} {exportResult.filename.endsWith('.mp4') ? 'MP4' : 'WebM'}
             </a>
           )}
           {frameSequenceResult && settings.visualStyle === 'tiktok' && (
             <a className="downloadButton" href={frameSequenceResult.url} download={frameSequenceResult.filename}>
               <span aria-hidden="true">↓</span>
-              下载逐词 PNG 序列（{frameSequenceResult.frameCount} 张）
+              {ui(`下载逐词 PNG 序列（${frameSequenceResult.frameCount} 张）`, `Download word PNG sequence (${frameSequenceResult.frameCount} frames)`)}
             </a>
           )}
         </section>
@@ -2120,16 +2204,16 @@ function App() {
           <section className="pasteLyricsDialog" role="dialog" aria-modal="true" aria-labelledby="pasteLyricsTitle">
             <header>
               <div>
-                <span>纯文本歌词</span>
-                <h2 id="pasteLyricsTitle">粘贴歌词并开始打轴</h2>
-                <p>每一行会成为一句歌词；空行会自动忽略。</p>
+                <span>{ui('纯文本歌词', 'Plain-text lyrics')}</span>
+                <h2 id="pasteLyricsTitle">{ui('粘贴歌词并开始打轴', 'Paste lyrics and add timing')}</h2>
+                <p>{ui('每一行会成为一句歌词；空行会自动忽略。', 'Each line becomes one lyric line; blank lines are ignored.')}</p>
               </div>
-              <button type="button" aria-label="关闭粘贴歌词窗口" onClick={() => setIsPasteLyricsOpen(false)}>×</button>
+              <button type="button" aria-label={ui('关闭粘贴歌词窗口', 'Close paste lyrics dialog')} onClick={() => setIsPasteLyricsOpen(false)}>×</button>
             </header>
             <textarea
               autoFocus
               value={pastedLyricsText}
-              placeholder={'把歌词粘贴到这里，例如：\n第一句歌词\n第二句歌词\n第三句歌词'}
+              placeholder={ui('把歌词粘贴到这里，例如：\n第一句歌词\n第二句歌词\n第三句歌词', 'Paste lyrics here, for example:\nFirst lyric line\nSecond lyric line\nThird lyric line')}
               onChange={(event) => {
                 setPastedLyricsText(event.target.value)
                 if (pasteLyricsError) setPasteLyricsError('')
@@ -2143,12 +2227,12 @@ function App() {
             />
             <footer>
               <div>
-                <strong>{parsePlainTextLyrics(pastedLyricsText).length} 行歌词</strong>
-                <span className={pasteLyricsError ? 'pasteLyricsError' : ''}>{pasteLyricsError || '⌘/Ctrl + Enter 可直接进入打轴器'}</span>
+                <strong>{ui(`${parsePlainTextLyrics(pastedLyricsText).length} 行歌词`, `${parsePlainTextLyrics(pastedLyricsText).length} lyric lines`)}</strong>
+                <span className={pasteLyricsError ? 'pasteLyricsError' : ''}>{pasteLyricsError || ui('⌘/Ctrl + Enter 可直接进入打轴器', '⌘/Ctrl + Enter opens the timing editor')}</span>
               </div>
               <div>
-                <button type="button" onClick={() => setIsPasteLyricsOpen(false)}>取消</button>
-                <button className="pasteLyricsStartButton" type="button" disabled={parsePlainTextLyrics(pastedLyricsText).length === 0} onClick={startTimingPastedLyrics}>进入打轴器</button>
+                <button type="button" onClick={() => setIsPasteLyricsOpen(false)}>{ui('取消', 'Cancel')}</button>
+                <button className="pasteLyricsStartButton" type="button" disabled={parsePlainTextLyrics(pastedLyricsText).length === 0} onClick={startTimingPastedLyrics}>{ui('进入打轴器', 'Open timing editor')}</button>
               </div>
             </footer>
           </section>
@@ -2164,6 +2248,7 @@ function App() {
           sourceName={timingEditorSource.name}
           metadata={timingEditorSource.metadata}
           initialLines={timingEditorSource.lines}
+          language={language}
           onCancel={() => setTimingEditorSource(null)}
           onApply={applyTimedLyrics}
         />
@@ -2174,6 +2259,7 @@ function App() {
 
 function PalettePresetButton(props: {
   palette: VisualizerPalette
+  language: UiLanguage
   active: boolean
   onClick: () => void
 }) {
@@ -2191,7 +2277,7 @@ function PalettePresetButton(props: {
       <span className="palettePresetPreview" style={previewStyle} aria-hidden="true" />
       <span className="palettePresetCopy">
         <strong>{props.palette.name}</strong>
-        <small>{props.palette.description}</small>
+        <small>{pickUiText(props.language, props.palette.description, props.palette.descriptionEn ?? props.palette.description)}</small>
       </span>
     </button>
   )
@@ -2229,7 +2315,7 @@ function RangeField(props: {
             max={props.max}
             value={numericValue}
             disabled={props.disabled}
-            aria-label={`${props.label}数值`}
+            aria-label={props.label}
             onChange={(event) => {
               const value = Number(event.target.value)
               if (Number.isFinite(value)) {

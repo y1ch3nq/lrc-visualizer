@@ -2,6 +2,7 @@ export interface VisualizerPalette {
   id: string
   name: string
   description: string
+  descriptionEn?: string
   backgroundColor: string
   lyricColor: string
   progressColor: string
@@ -29,6 +30,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'sunset-bloom',
     name: 'Sunset Bloom',
     description: '暖棕、橙红与奶油白',
+    descriptionEn: 'Warm brown, orange-red & cream',
     backgroundColor: '#AD7338',
     lyricColor: '#FFF7EC',
     progressColor: '#FF7130',
@@ -39,6 +41,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'apricot-mist',
     name: 'Apricot Mist',
     description: '杏粉、珊瑚与柔和象牙色',
+    descriptionEn: 'Apricot pink, coral & soft ivory',
     backgroundColor: '#D99A7A',
     lyricColor: '#FFF8F0',
     progressColor: '#C94E43',
@@ -49,6 +52,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'sage-paper',
     name: 'Sage Paper',
     description: '鼠尾草绿与纸张米色',
+    descriptionEn: 'Sage green & paper beige',
     backgroundColor: '#78866B',
     lyricColor: '#FFFBEF',
     progressColor: '#D9E6A2',
@@ -59,6 +63,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'glacier-glass',
     name: 'Glacier Glass',
     description: '冰川蓝与冷白高光',
+    descriptionEn: 'Glacier blue & cool white highlights',
     backgroundColor: '#527B8F',
     lyricColor: '#F6FCFF',
     progressColor: '#92E4E8',
@@ -69,6 +74,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'plum-velvet',
     name: 'Plum Velvet',
     description: '深梅紫与柔粉高光',
+    descriptionEn: 'Deep plum & soft pink highlights',
     backgroundColor: '#51384E',
     lyricColor: '#FFF5FC',
     progressColor: '#F08AB8',
@@ -79,6 +85,7 @@ export const palettePresets: VisualizerPalette[] = [
     id: 'ink-cream',
     name: 'Ink & Cream',
     description: '墨色、奶油白与金色强调',
+    descriptionEn: 'Ink, cream & gold accents',
     backgroundColor: '#272A31',
     lyricColor: '#FFF9E9',
     progressColor: '#EBC878',
@@ -146,6 +153,7 @@ export function extractPaletteFromRgba(
       id: `image-${Date.now()}`,
       name: '图片智能配色',
       description: '根据图片的感知色彩聚类生成',
+      descriptionEn: 'Generated from perceptual color clusters in the image',
       backgroundColor,
       lyricColor,
       progressColor,

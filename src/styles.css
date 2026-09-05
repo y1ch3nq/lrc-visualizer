@@ -2664,6 +2664,39 @@ body {
   margin-left: auto;
 }
 
+.languageSwitch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid #e1e0dc;
+  border-radius: 9px;
+  background: #f4f3f0;
+}
+
+.languageSwitch button {
+  min-width: 34px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #7a7872;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.languageSwitch button:hover:not(.active) {
+  color: #45433f;
+}
+
+.languageSwitch button.active {
+  color: #2d2c29;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(34, 32, 29, 0.12);
+}
+
 .autosaveStatus {
   color: #81807b;
   font-size: 12px;
@@ -3994,6 +4027,10 @@ canvas[data-orientation="square"] {
   content: '随时导出成片';
   font-size: 10px;
   font-weight: 600;
+}
+
+html[lang="en"] .exportGroup .sectionTitleRow h2::after {
+  content: 'Ready when you are';
 }
 
 .primaryButton {
