@@ -34,6 +34,7 @@ const knownErrorTranslations = new Map<string, string>([
   ['当前浏览器不支持音频解码', 'This browser does not support audio decoding'],
   ['无法创建离屏导出画布', 'Unable to create the offscreen export canvas'],
   ['编码器没有生成可用的媒体帧', 'The encoder produced no usable media frames'],
+  ['编码器未返回透明通道数据，请更换支持 VP9 Alpha 的浏览器', 'The encoder did not return alpha-channel data. Use a browser that supports VP9 Alpha.'],
   ['编码过程中断', 'Encoding was interrupted'],
   ['WebM 数据过大，无法封装', 'The WebM data is too large to mux'],
 ])

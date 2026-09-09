@@ -49,6 +49,11 @@ interface EncodedTrackChunk {
   durationUs: number
   keyFrame: boolean
   data: Uint8Array
+  alphaSideData?: Uint8Array
+}
+
+type EncodedVideoChunkMetadataWithAlpha = EncodedVideoChunkMetadata & {
+  alphaSideData?: AllowSharedBufferSource
 }
 
 interface VideoEncodingPlan {
@@ -179,6 +184,13 @@ export async function fastExportVisualizer(input: FastExportInput): Promise<Fast
   const targetDurationUs = Math.round(exportDuration * 1_000_000)
   const boundedVideoTrack = trimEncodedTrackToDuration(videoTrack, targetDurationUs)
   const boundedAudioTrack = trimEncodedTrackToDuration(audioTrack, targetDurationUs)
+  const hasEncodedAlpha = boundedVideoTrack.chunks.some(
+    (chunk) => (chunk.alphaSideData?.byteLength ?? 0) > 0,
+  )
+
+  if (input.settings.transparentBackground && !hasEncodedAlpha) {
+    throw new Error('编码器未返回透明通道数据，请更换支持 VP9 Alpha 的浏览器')
+  }
 
   input.onProgress(0.96, endTime)
   const blob = plan.container === 'mp4'
@@ -207,7 +219,7 @@ export async function fastExportVisualizer(input: FastExportInput): Promise<Fast
         videoCodecId: plan.video.codecId ?? 'V_VP9',
         audioSampleRate: plan.audio.sampleRate,
         audioChannels: plan.audio.numberOfChannels,
-        hasAlpha: input.settings.transparentBackground && plan.video.config.alpha === 'keep',
+        hasAlpha: hasEncodedAlpha,
       })
 
   input.onProgress(1, endTime)
@@ -238,12 +250,40 @@ async function selectExportPlan(settings: VisualizerSettings): Promise<ExportEnc
 }
 
 async function selectWebMVideoPlan(settings: VisualizerSettings): Promise<VideoEncodingPlan | null> {
-  const alphaPreference: AlphaOption = settings.transparentBackground ? 'keep' : 'discard'
-  const candidates: Array<{ codec: string; codecId: 'V_VP8' | 'V_VP9'; alpha: AlphaOption }> = [
-    { codec: 'vp09.00.10.08', codecId: 'V_VP9', alpha: alphaPreference },
-    { codec: 'vp8', codecId: 'V_VP8', alpha: 'discard' },
-    { codec: 'vp09.00.10.08', codecId: 'V_VP9', alpha: 'discard' },
-  ]
+  const candidates: Array<{
+    codec: string
+    codecId: 'V_VP8' | 'V_VP9'
+    alpha: AlphaOption
+    hardwareAcceleration: HardwareAcceleration
+  }> = settings.transparentBackground
+    ? [
+        {
+          codec: 'vp09.00.10.08',
+          codecId: 'V_VP9',
+          alpha: 'keep',
+          hardwareAcceleration: 'prefer-software',
+        },
+        {
+          codec: 'vp09.00.10.08',
+          codecId: 'V_VP9',
+          alpha: 'keep',
+          hardwareAcceleration: 'no-preference',
+        },
+      ]
+    : [
+        {
+          codec: 'vp09.00.10.08',
+          codecId: 'V_VP9',
+          alpha: 'discard',
+          hardwareAcceleration: 'prefer-hardware',
+        },
+        {
+          codec: 'vp8',
+          codecId: 'V_VP8',
+          alpha: 'discard',
+          hardwareAcceleration: 'prefer-hardware',
+        },
+      ]
 
   for (const candidate of candidates) {
     const config: VideoEncoderConfig = {
@@ -255,7 +295,7 @@ async function selectWebMVideoPlan(settings: VisualizerSettings): Promise<VideoE
       framerate: fastFrameRate,
       bitrate: 20_000_000,
       alpha: candidate.alpha,
-      hardwareAcceleration: 'prefer-hardware',
+      hardwareAcceleration: candidate.hardwareAcceleration,
       latencyMode: 'realtime',
     }
 
@@ -263,7 +303,11 @@ async function selectWebMVideoPlan(settings: VisualizerSettings): Promise<VideoE
       const support = await VideoEncoder.isConfigSupported(config)
       if (support.supported) {
         return {
-          config: support.config ?? config,
+          config: {
+            ...(support.config ?? config),
+            alpha: candidate.alpha,
+            hardwareAcceleration: candidate.hardwareAcceleration,
+          },
           codecId: candidate.codecId,
         }
       }
@@ -491,7 +535,21 @@ async function encodeVideoTrack(input: {
     output: (chunk, metadata) => {
       const fallbackDurationUs = frameDurations.get(chunk.timestamp) ?? nominalFrameDurationUs
       frameDurations.delete(chunk.timestamp)
-      chunks.push(copyEncodedChunk(chunk, videoTrackNumber, chunk.type === 'key', fallbackDurationUs))
+      const encodedChunk = copyEncodedChunk(
+        chunk,
+        videoTrackNumber,
+        chunk.type === 'key',
+        fallbackDurationUs,
+      )
+      const alphaSideData = copyBufferSource(
+        (metadata as EncodedVideoChunkMetadataWithAlpha | undefined)?.alphaSideData,
+      )
+
+      if (alphaSideData && alphaSideData.byteLength > 0) {
+        encodedChunk.alphaSideData = alphaSideData
+      }
+
+      chunks.push(encodedChunk)
       decoderConfig ??= copyDecoderConfig(metadata?.decoderConfig?.description)
     },
     error: (error) => {
@@ -622,17 +680,23 @@ function trimEncodedTrackToDuration(
 }
 
 function copyDecoderConfig(description: AllowSharedBufferSource | undefined): Uint8Array | undefined {
-  if (!description) {
+  return copyBufferSource(description)
+}
+
+function copyBufferSource(source: AllowSharedBufferSource | undefined): Uint8Array | undefined {
+  if (!source) {
     return undefined
   }
 
-  if (ArrayBuffer.isView(description)) {
-    const copy = new Uint8Array(description.byteLength)
-    copy.set(new Uint8Array(description.buffer, description.byteOffset, description.byteLength))
+  if (ArrayBuffer.isView(source)) {
+    const copy = new Uint8Array(source.byteLength)
+    copy.set(new Uint8Array(source.buffer, source.byteOffset, source.byteLength))
     return copy
   }
 
-  return new Uint8Array(description.slice(0))
+  const copy = new Uint8Array(source.byteLength)
+  copy.set(new Uint8Array(source))
+  return copy
 }
 
 function requireDecoderConfig(config: Uint8Array | undefined, codec: string): Uint8Array {
@@ -723,19 +787,22 @@ function createVideoTrackEntry(input: {
     uintElement(0xb0, input.width),
     uintElement(0xba, input.height),
   ]
-
-  if (input.hasAlpha) {
-    videoElements.push(uintElement(0x53c0, 1))
-  }
-
-  return masterElement(0xae, [
+  const trackElements = [
     uintElement(0xd7, videoTrackNumber),
     uintElement(0x73c5, videoTrackNumber),
     uintElement(0x83, 1),
     stringElement(0x86, input.videoCodecId),
     uintElement(0x23e383, Math.round(1_000_000_000 / input.frameRate)),
-    masterElement(0xe0, videoElements),
-  ])
+  ]
+
+  if (input.hasAlpha) {
+    videoElements.push(uintElement(0x53c0, 1))
+    trackElements.push(uintElement(0x55ee, 1))
+  }
+
+  trackElements.push(masterElement(0xe0, videoElements))
+
+  return masterElement(0xae, trackElements)
 }
 
 function createAudioTrackEntry(sampleRate: number, numberOfChannels: number): Uint8Array {
@@ -766,6 +833,7 @@ function createClusters(chunks: EncodedTrackChunk[]): Uint8Array[] {
   const clusters: Uint8Array[] = []
   let clusterStartMs = 0
   let clusterBlocks: Uint8Array[] = []
+  const previousChunkTimeByTrack = new Map<number, number>()
 
   const flushCluster = () => {
     if (clusterBlocks.length === 0) {
@@ -791,15 +859,37 @@ function createClusters(chunks: EncodedTrackChunk[]): Uint8Array[] {
       clusterStartMs = chunkTimeMs
     }
 
-    clusterBlocks.push(binaryElement(
-      0xa3,
-      createSimpleBlock({
+    if (chunk.alphaSideData && chunk.alphaSideData.byteLength > 0) {
+      const blockGroupChildren = [
+        binaryElement(0xa1, createBlockPayload({
+          trackNumber: chunk.trackNumber,
+          relativeTimeMs: chunkTimeMs - clusterStartMs,
+          data: chunk.data,
+        })),
+        masterElement(0x75a1, [
+          masterElement(0xa6, [
+            uintElement(0xee, 1),
+            binaryElement(0xa5, chunk.alphaSideData),
+          ]),
+        ]),
+      ]
+      const previousChunkTimeMs = previousChunkTimeByTrack.get(chunk.trackNumber)
+
+      if (!chunk.keyFrame && previousChunkTimeMs !== undefined) {
+        blockGroupChildren.push(intElement(0xfb, previousChunkTimeMs - chunkTimeMs))
+      }
+
+      clusterBlocks.push(masterElement(0xa0, blockGroupChildren))
+    } else {
+      clusterBlocks.push(binaryElement(0xa3, createBlockPayload({
         trackNumber: chunk.trackNumber,
         relativeTimeMs: chunkTimeMs - clusterStartMs,
         keyFrame: chunk.keyFrame,
         data: chunk.data,
-      }),
-    ))
+      })))
+    }
+
+    previousChunkTimeByTrack.set(chunk.trackNumber, chunkTimeMs)
   })
 
   flushCluster()
@@ -807,10 +897,10 @@ function createClusters(chunks: EncodedTrackChunk[]): Uint8Array[] {
   return clusters
 }
 
-function createSimpleBlock(input: {
+function createBlockPayload(input: {
   trackNumber: number
   relativeTimeMs: number
-  keyFrame: boolean
+  keyFrame?: boolean
   data: Uint8Array
 }): Uint8Array {
   const block = new Uint8Array(4 + input.data.byteLength)
@@ -846,6 +936,10 @@ function masterElement(id: number, children: Uint8Array[]): Uint8Array {
 
 function uintElement(id: number, value: number | bigint): Uint8Array {
   return binaryElement(id, encodeUnsignedInteger(value))
+}
+
+function intElement(id: number, value: number | bigint): Uint8Array {
+  return binaryElement(id, encodeSignedInteger(value))
 }
 
 function floatElement(id: number, value: number): Uint8Array {
@@ -914,6 +1008,29 @@ function encodeUnsignedInteger(value: number | bigint): Uint8Array {
   }
 
   return new Uint8Array(bytes)
+}
+
+function encodeSignedInteger(value: number | bigint): Uint8Array {
+  const integer = typeof value === 'bigint' ? value : BigInt(Math.trunc(value))
+  let byteLength = 1
+
+  while (
+    integer < -(1n << BigInt(byteLength * 8 - 1))
+    || integer > (1n << BigInt(byteLength * 8 - 1)) - 1n
+  ) {
+    byteLength += 1
+  }
+
+  const bitLength = BigInt(byteLength * 8)
+  let remaining = integer < 0 ? (1n << bitLength) + integer : integer
+  const bytes = new Uint8Array(byteLength)
+
+  for (let index = byteLength - 1; index >= 0; index -= 1) {
+    bytes[index] = Number(remaining & 0xffn)
+    remaining >>= 8n
+  }
+
+  return bytes
 }
 
 function concatBytes(parts: Uint8Array[]): Uint8Array {

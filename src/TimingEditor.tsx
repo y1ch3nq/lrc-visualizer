@@ -126,6 +126,48 @@ export function TimingEditor({
     setActiveWordTimingLineId((current) => current === lineId ? null : current)
   }, [])
 
+  const clearAllTiming = useCallback(() => {
+    audioRef.current?.pause()
+    setLines((current) => current.map((line) => ({
+      ...line,
+      startTime: undefined,
+      endTime: undefined,
+      words: [],
+    })))
+    setWordTimingDrafts({})
+    setActiveWordTimingLineId(null)
+    setWordTimingCursor(0)
+    setSelectedIndex(0)
+    seekTo(0)
+    setStatus(ui(
+      `已清空全部 ${lines.length} 句的句首、句尾和逐词时间；歌词文字已保留。`,
+      `Cleared line starts, ends, and word timing from all ${lines.length} lines. Lyric text was preserved.`,
+    ))
+  }, [lines.length, seekTo, ui])
+
+  const deleteSelectedLine = useCallback(() => {
+    if (!selectedLine) {
+      return
+    }
+
+    const deletedLineId = selectedLine.id
+    const remainingLineCount = Math.max(0, lines.length - 1)
+    setLines((current) => current.filter((line) => line.id !== deletedLineId))
+    setWordTimingDrafts((current) => {
+      if (!current[deletedLineId]) return current
+      const next = { ...current }
+      delete next[deletedLineId]
+      return next
+    })
+    setActiveWordTimingLineId(null)
+    setWordTimingCursor(0)
+    setSelectedIndex(Math.min(selectedIndex, Math.max(0, remainingLineCount - 1)))
+    setStatus(ui(
+      `已删除第 ${selectedIndex + 1} 句，剩余 ${remainingLineCount} 句。`,
+      `Deleted line ${selectedIndex + 1}. ${remainingLineCount} ${remainingLineCount === 1 ? 'line remains' : 'lines remain'}.`,
+    ))
+  }, [lines.length, selectedIndex, selectedLine, ui])
+
   const beginWordTiming = useCallback(() => {
     if (!selectedLine) {
       return
@@ -531,11 +573,21 @@ export function TimingEditor({
         <div className="timingEditorBody">
           <div className="timingLineColumn">
             <div className="timingColumnTitle">
-              <span>{ui('歌词行', 'Lyric lines')}</span>
-              <small>{ui(
-                `${lines.length} 句 · ${lines.filter((line) => line.startTime !== undefined).length} 句已有句首`,
-                `${lines.length} lines · ${lines.filter((line) => line.startTime !== undefined).length} timed`,
-              )}</small>
+              <div className="timingColumnTitleCopy">
+                <span>{ui('歌词行', 'Lyric lines')}</span>
+                <small>{ui(
+                  `${lines.length} 句 · ${lines.filter((line) => line.startTime !== undefined).length} 句已有句首`,
+                  `${lines.length} lines · ${lines.filter((line) => line.startTime !== undefined).length} timed`,
+                )}</small>
+              </div>
+              <button
+                className="timingClearAllButton"
+                type="button"
+                disabled={lines.length === 0}
+                onClick={clearAllTiming}
+              >
+                {ui('一键清空全部时间', 'Clear all timing')}
+              </button>
             </div>
             <div className="timingLineList">
               {lines.map((line, index) => {
@@ -628,6 +680,9 @@ export function TimingEditor({
                     updateLine(selectedIndex, { startTime: undefined, endTime: undefined, words: [] })
                     invalidateWordTiming(selectedLine.id)
                   }}>{ui('清除此句时间', 'Clear line timing')}</button>
+                  <button className="timingDeleteLineButton" type="button" onClick={deleteSelectedLine}>
+                    {ui('删除当前句', 'Delete current line')}
+                  </button>
                 </div>
               </div>
             )}

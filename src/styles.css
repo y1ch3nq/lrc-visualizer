@@ -4739,6 +4739,35 @@ body:has(.timingEditorBackdrop) {
   font-weight: 560;
 }
 
+.timingColumnTitleCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.timingClearAllButton {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid #dfc9bf;
+  border-radius: 7px;
+  color: #a14f3d;
+  background: #fff9f6;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.timingClearAllButton:hover:not(:disabled) {
+  border-color: #d9a895;
+  background: #fff2eb;
+}
+
+.timingClearAllButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .timingLineList {
   min-height: 0;
   overflow: auto;
@@ -5000,6 +5029,18 @@ body:has(.timingEditorBackdrop) {
   font-size: 9px;
   font-weight: 680;
   cursor: pointer;
+}
+
+.timingFineSeek .timingDeleteLineButton {
+  margin-left: auto;
+  border-color: #e4c7c1;
+  color: #a74f43;
+  background: #fff8f6;
+}
+
+.timingFineSeek .timingDeleteLineButton:hover {
+  border-color: #d9a399;
+  background: #fff0ed;
 }
 
 .manualWordTimingCard {

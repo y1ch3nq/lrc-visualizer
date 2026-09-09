@@ -2175,7 +2175,7 @@ function App() {
           </div>
           <p className="statusLine">{exportStatus}</p>
           {settings.transparentBackground && (
-            <p className="statusLine">{ui('透明画布可预览；MP4 通常不保留 alpha，WebM/VP9 更适合透明素材。', 'Transparent canvas is available in preview. MP4 usually does not retain alpha; WebM/VP9 is better for transparent assets.')}</p>
+            <p className="statusLine">{ui('透明导出将生成 VP9 Alpha WebM；若浏览器编码器不支持透明通道，导出会明确报错，不会生成不透明视频。', 'Transparent export creates a VP9 Alpha WebM. If the browser encoder cannot preserve alpha, export fails visibly instead of producing an opaque video.')}</p>
           )}
           {fastExportSupport?.supported && (
             <p className="statusLine">{ui('画面与音频均直接编码，不使用 MediaRecorder 或预览录制；切换窗口不会影响成片。', 'Video and audio are encoded directly without MediaRecorder or preview capture, so switching windows does not affect the export.')}</p>
