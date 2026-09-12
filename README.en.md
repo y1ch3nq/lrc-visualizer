@@ -10,7 +10,7 @@ Time lyrics, design visuals, and export finished videos in the browser. All asse
 
 | Single-line lyric | TikTok monochrome word reveal |
 | --- | --- |
-| [![Play the single-line lyric example](docs/media/single-line-wave-cover.png)](docs/media/single-line-wave.mp4?raw=1) | [![Play the TikTok word-reveal example](docs/media/tiktok-word-reveal-cover.png)](docs/media/tiktok-word-reveal.mp4?raw=1) |
+| [![Play the single-line lyric example](public/examples/single-line-wave-cover.png)](https://y1ch3nq.github.io/lrc-visualizer/examples/single-line-wave.mp4) | [![Play the TikTok word-reveal example](public/examples/tiktok-word-reveal-cover.png)](https://y1ch3nq.github.io/lrc-visualizer/examples/tiktok-word-reveal.mp4) |
 | Click a cover to play | Click a cover to play |
 
 ## How to use

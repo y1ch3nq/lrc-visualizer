@@ -10,7 +10,7 @@
 
 | 柔性单句歌词 | TikTok 黑白逐词 |
 | --- | --- |
-| [![播放柔性单句歌词示例](docs/media/single-line-wave-cover.png)](docs/media/single-line-wave.mp4?raw=1) | [![播放 TikTok 黑白逐词示例](docs/media/tiktok-word-reveal-cover.png)](docs/media/tiktok-word-reveal.mp4?raw=1) |
+| [![播放柔性单句歌词示例](public/examples/single-line-wave-cover.png)](https://y1ch3nq.github.io/lrc-visualizer/examples/single-line-wave.mp4) | [![播放 TikTok 黑白逐词示例](public/examples/tiktok-word-reveal-cover.png)](https://y1ch3nq.github.io/lrc-visualizer/examples/tiktok-word-reveal.mp4) |
 | 点击封面播放 | 点击封面播放 |
 
 ## 使用方法
